@@ -1,0 +1,171 @@
+---
+title: "nitrogen upshift of FY4 measured with coulter counter, analysis and figure generation"
+author: "darach"
+date: "`r Sys.Date()`"
+---
+
+The experiment:
+
+- On 151130, one colony of DGY1 (FY4) yeast was started off a YPD
+  plate into a 5ml O/N of NlimPro(800uM).
+- On 151201, this was 1.17e7 cells per ml, so I diluted 400ul of this
+  onto 50ml of NlimPro(800uM) @1120, put onto 30C shaker.
+- On 151202, I took samples.
+
+For each sample, I sampled into an eppendorf and sonicated them 
+briefly (standard Gresham lab sonication for coulter counter), 
+diluted them 1:50 in isoton (so 200ul into 10ml). These were measured
+with Coulter Counter Z2. I measured a isoton
+blank (recorded for below gating) then measured the sample, for each
+one. I exported these as a Z2 file, and used the below script to
+check the blanks for gating. We can't see below 2 micron diameter,
+and so I set a cutoff of 2.5 microns because it cut out most of the
+crud in the blanks.
+
+During the experiment, I added 200ul 100mM glutamine at 14:09. 
+
+```{r, libs, cache=F}
+require(plyr)
+require(reshape2)
+require(ggplot2)
+```
+
+```{r, readinData, cache=T}
+dataDir <- "../data/dme152coulterCounterUpshift/"
+sampleSheet <- read.csv(paste0(dataDir,"SampleSheet.csv"),row.names=1)
+sampleSheet$Minutes <- 
+  60*as.numeric(sub("(\\d+?)(\\d\\d)","\\1",sampleSheet$Time))+
+  as.numeric(sub("(\\d+?)(\\d\\d)","\\2",sampleSheet$Time))
+
+datz <- ddply(
+  ldply(list.files(path=dataDir,pattern=".=#Z2$"),.id="File",
+    function(x) { print(paste0("Reading ",dataDir,"",x))
+	    tmp <- readLines(paste0(dataDir,x))
+	    binunits <- as.numeric(tmp[(grep("Bindiam",tmp)+1):
+                                 (grep("Binunits",tmp)-1)])
+	    binheight<- as.numeric(tmp[(grep("Binheight",tmp)+1):
+                                 (grep("\\[end\\]",tmp)-1)])
+	    return(data.frame(File=x,BinCenter=binunits,BinHeight=binheight))
+    }),
+  .(File),function(x){
+    return(data.frame(x,sampleSheet[as.character(unique(x$File)),],
+                      row.names=NULL))
+  })
+datz$Hours <- datz$Minutes/60
+datz$Hours <- datz$Hours - (14+9/60)
+
+datz[sample(1:nrow(datz),10),]
+dim(datz)
+
+```
+
+```{r,exploratoryPlots, cache=T}
+
+ggplot(datz)+aes(x=BinCenter,y=BinHeight,col=factor(Minutes))+
+	geom_point()+facet_wrap(~Sample)
+
+ggplot(subset(datz,BinCenter>2.0))+aes(x=BinCenter,y=BinHeight,col=factor(Minutes))+
+	geom_point()+facet_wrap(~Sample)
+
+ggplot(subset(datz,BinCenter>2.5))+aes(x=BinCenter,y=BinHeight,col=factor(Minutes))+
+	geom_point()+facet_wrap(~Sample)
+
+ggplot(subset(datz,BinCenter>3.0))+aes(x=BinCenter,y=BinHeight,col=factor(Minutes))+
+	geom_point()+facet_wrap(~Sample)
+
+datz <- subset(datz,BinCenter>2.5&BinCenter<7.0&Sample=="sample")
+```
+
+Upshift happened at 14:09, so that's at 849 minutes or 14.15 hours.
+
+```{r, plots,cache=F}
+
+counts <- aggregate(BinHeight~Hours,data=datz,FUN=sum)
+counts$e6CellsPerMl <- counts$BinHeight/2000
+
+# using log10 to make plotting behave nicely
+firstGrowthModel <- lm(data=subset(counts,Hours<(0+2)),
+  log10(e6CellsPerMl)~Hours)
+prolineGR <- log(2)/firstGrowthModel$coefficients[2]/log(10)
+
+secondGrowthModel <- lm(data=subset(counts,Hours>=(0+2)),
+  log10(e6CellsPerMl)~Hours)
+glutamineGR <- log(2)/secondGrowthModel$coefficients[2]/log(10)
+
+g<-ggplot(counts)+aes(x=Hours,y=e6CellsPerMl)+theme_bw()+
+  geom_point()+
+  ylab("Million cells per ml\n")+
+  xlab("Hours")+
+  scale_y_log10(breaks=c(1,2,3,4,5,6,7,8,9,10,12,14))+
+  scale_x_continuous(breaks=seq(-4,7,2))+
+  annotate(geom="text",x=0.5,y=7,angle=270,
+    label="Glutamine addition")+
+  geom_vline(xintercept=0,linetype="solid")
+g
+g2<-g+geom_abline(intercept=firstGrowthModel$coefficients[1],
+  slope=firstGrowthModel$coefficients[2],linetype="dotted",alpha=0.5)+
+  annotate(geom="text",x=-2,y=4,
+    label=paste0(signif(prolineGR,3)," hour\ndoubling time"))+
+  geom_abline(intercept=secondGrowthModel$coefficients[1],
+    slope=secondGrowthModel$coefficients[2],linetype="dotted",alpha=0.5)+
+  annotate(geom="text",x=5,y=2.5,
+    label=paste0(signif(glutamineGR,3)," hour\ndoubling time"))
+g2
+```
+
+```{r,cache=T}
+summaryStats <- ddply(datz,.(Hours),.id="Diameters",
+  function(x){
+    summary(rep(x$BinCenter,x$BinHeight))
+  }
+)
+
+g <- ggplot(summaryStats)+theme_bw()+
+	aes(x=Hours,y=Mean)+
+	geom_point()+
+  geom_vline(xintercept=0,linetype="solid")+
+  geom_hline(yintercept=mean(subset(summaryStats,Hours<0)$Mean),
+    linetype="dotted")+
+  geom_hline(yintercept=mean(subset(summaryStats,Hours>2)$Mean),
+    linetype="dotted")+
+  scale_x_continuous(breaks=seq(-4,7,2))+
+  ylab("Mean cell diameter,\nin microns")
+g
+```
+
+```{r,cache=T}
+mean(subset(summaryStats,Hours<0)$Mean)
+mean(subset(summaryStats,Hours>2)$Mean)
+
+g <- ggplot(melt(summaryStats,id.vars=c("Hours"),
+              measure.vars=c("Median","Mean")))+
+  theme_bw()+
+	aes(x=Hours,y=value,col=variable)+facet_grid(variable~.)+
+	geom_point()
+g
+
+together <- data.frame(counts,summaryStats)
+together$log10e6CellsPerMl <- log10(together$e6CellsPerMl)
+
+ggplot(melt(together,id.vars="Hours",
+         measure.vars=c("log10e6CellsPerMl","Median")))+
+  theme_bw()+
+  aes(x=Hours,y=value)+facet_grid(variable~.,scale="free_y")+
+  geom_point()+
+  geom_vline(xintercept=0)+
+  geom_vline(xintercept=2)
+
+```
+
+```{r}
+library(tidyverse)
+plotdatar <- full_join(counts%>%select(Hours,e6CellsPerMl),
+  summaryStats%>%select(Hours,Median,Mean),
+  by="Hours")%>%ungroup()
+save(list=c("plotdatar","summaryStats"),file="../tmp/coulterCounterData.RData")
+```
+
+```{r}
+sessionInfo()
+```
+

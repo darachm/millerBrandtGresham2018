@@ -1,0 +1,647 @@
+---
+title: "Figure 5"
+author: "Darach"
+---
+
+
+```{r}
+library(tidyverse)
+library(stringr)
+library(ggrepel)
+library(Cairo)
+load("../tmp/NameIDList.RData")
+load("../tmp/dme209modelingDat.RData")
+load("../tmp/dme209_modelsToConsider.RData")
+load("../tmp/dme209_filteredFits.RData")
+load("../tmp/dme209_rankingList.RData")
+```
+
+```{r}
+commonGAP1breaks <- c(.75,1.5,3,6,12,24,48)*1e3
+cbPalette <- c("#56B4E9", "#009E73", "#D55E00", "#CC79A7","#E69F00", "#F0E442", "#0072B2" )
+# scooped from CookBookR
+
+filteredFits <- filteredFits %>% 
+  mutate(LabelName=str_c(tolower(Common),"Δ"))
+
+rankingList <- rankingList %>% 
+  mutate(LabelName=str_c(tolower(Common),"Δ"))
+```
+
+```{r}
+
+gbase <- filteredFits %>% 
+  mutate(Shifted=relevel(factor(Shifted),"Shifted"))%>%
+  ggplot()+theme_classic()+
+  aes(x=Shifted,y=exp(LogMiddle))+
+  scale_y_log10(breaks=commonGAP1breaks)+
+  ylab("Mean GAP1 expression, modeled (a.u.)")+
+  theme(text=element_text(size=10))+
+  geom_violin(adjust=0.2)+
+  xlab(NULL)+
+  scale_x_discrete(labels=c(PreShift="Pre-upshift",
+      Shifted="Post-upshift")
+    )+coord_flip()
+
+gbaser <- filteredFits %>% 
+  mutate(Shifted=relevel(factor(Shifted),"PreShift"))%>%
+  ggplot()+theme_classic()+
+  aes(x=Shifted,y=exp(LogMiddle))+
+  scale_y_log10(breaks=commonGAP1breaks)+
+  ylab("Mean GAP1 signal\nof modeled distribution (a.u.)")+
+  geom_violin(adjust=0.2)+
+  xlab(NULL)+
+  scale_x_discrete(labels=c(PreShift="Pre-upshift",
+      Shifted="Post-upshift")
+    )
+
+thispdat <- filteredFits %>%
+  filter(Common%in%c("HIS3"
+      ,"MET5","MET8","MET1","MET10","MET14","TRX2"
+      )
+    )%>%
+  mutate(Class="Sulfate assimilation")%>%
+  mutate(Class=ifelse(grepl("HIS3",Common),"Wild-type",Class))%>%
+  mutate(Class=relevel(factor(Class),"Wild-type"))
+fig5sulfViolin <- gbaser+
+  scale_color_manual(values=c("black",cbPalette))+
+  geom_point(data=thispdat%>%select(Shifted,LogMiddle,Class)%>%distinct
+    ,aes(col=Class))+
+  geom_line(data=thispdat%>%select(Shifted,Strain,LogMiddle,Class)%>%distinct
+    ,aes(col=Class,group=Strain))+
+  geom_text_repel(data=thispdat%>%filter(Shifted=="PreShift")%>%
+      filter(Class!="Negative regulation\nof gluconeogenesis")%>%
+      select(Shifted,LogMiddle,LabelName)%>%distinct
+    ,aes(label=LabelName),nudge_x=-0.3,nudge_y=0.0,segment.color="grey50") 
+fig5sulfViolin
+
+ggsave("../output/Figure5_S_sulfateAssimilation.un.tiff"
+  ,fig5sulfViolin,width=5,height=5)
+
+thispdat <- filteredFits %>%
+  filter(Common%in%c("HIS3"
+      ,"VID30","UBC8","GID8","UBP14","VID24"
+      )
+    )%>%
+  mutate(Class=NA)%>%
+  mutate(Class=ifelse(grepl("HIS3",Common),"Wild-type",Class))%>%
+  mutate(Class=ifelse(grepl("(VID30)|(UBC8)|(GID8)|(UBP14)|(VID24)"
+      ,Common)
+    ,"Negative regulation\nof gluconeogenesis",Class)
+    ) %>%
+  mutate(Class=relevel(factor(Class),"Wild-type"))
+fig5glucViolin <- gbaser+
+  scale_color_manual(values=c("black",cbPalette))+
+  geom_point(data=thispdat%>%select(Shifted,LogMiddle,Class)%>%distinct
+    ,aes(col=Class))+
+  geom_line(data=thispdat%>%select(Shifted,Strain,LogMiddle,Class)%>%distinct
+    ,aes(col=Class,group=Strain))+
+  geom_text_repel(data=thispdat%>%filter(Shifted=="PreShift")%>%
+      filter(Class=="Negative regulation\nof gluconeogenesis")%>%
+      select(Shifted,LogMiddle,LabelName)%>%distinct
+    ,aes(label=LabelName),nudge_x=-0.3,nudge_y=0.0,segment.color="grey50") 
+fig5glucViolin
+
+ggsave("../output/Figure5_S_negGluconeogenesis.un.tiff"
+  ,fig5glucViolin,width=5,height=5)
+
+thispdat <- filteredFits %>%
+  filter(Common%in%c("HIS3"
+      ,"LSM1","LSM6","PAT1","EDC3","SCD6"
+      )
+    )%>%
+  mutate(Class=NA)%>%
+  mutate(Class=ifelse(grepl("HIS3",Common),"Wild-type",Class))%>%
+  mutate(LabelName=ifelse(grepl("HIS3",Common),"Wild-type",LabelName))%>%
+  mutate(Class=ifelse(grepl("(LSM1)|(LSM6)|(PAT1)",Common)
+      ,"Lsm1-7p/Pat1p complex",Class)
+    ) %>%
+  mutate(Class=ifelse(grepl("(EDC3)|(SCD6)|(VTS1)",Common)
+      ,"Decapping modulator",Class)
+    ) %>%
+  mutate(Class=relevel(factor(Class),"Wild-type"))
+
+fig5lsmViolin <- gbase+
+  scale_color_manual("",values=c("black",cbPalette[3:length(cbPalette)]))+
+  theme(legend.position="bottom")+
+  geom_point(data=thispdat%>%select(Shifted,LogMiddle,Class)%>%distinct
+    ,aes(col=Class))+
+  geom_line(data=thispdat%>%select(Shifted,Strain,LogMiddle,Class)%>%distinct
+    ,aes(col=Class,group=Strain))+
+  geom_text_repel(data=thispdat%>%filter(Shifted=="PreShift")%>%
+      filter(Class!="Negative regulation\nof gluconeogenesis")%>%
+      select(Shifted,LogMiddle,LabelName)%>%distinct
+    ,aes(label=LabelName),nudge_x=0.3,nudge_y=0.0,segment.color="grey50") +
+  geom_text_repel(data=thispdat%>%filter(Shifted=="Shifted")%>%
+      filter(Class=="Negative regulation\nof gluconeogenesis")%>%
+      select(Shifted,LogMiddle,LabelName)%>%distinct
+    ,aes(label=LabelName),nudge_x=-0.3,nudge_y=0.0,segment.color="grey50") 
+fig5lsmViolin
+
+fig5lsmViolinVert <- gbaser+
+  scale_color_manual("",values=c("black",cbPalette[3:length(cbPalette)]))+
+  geom_point(data=thispdat%>%select(Shifted,LogMiddle,Class)%>%distinct
+    ,aes(col=Class))+
+  geom_line(data=thispdat%>%select(Shifted,Strain,LogMiddle,Class)%>%distinct
+    ,aes(col=Class,group=Strain))+
+  geom_text_repel(data=thispdat%>%filter(Shifted=="PreShift")%>%
+      filter(Class!="Negative regulation\nof gluconeogenesis")%>%
+      select(Shifted,LogMiddle,LabelName)%>%distinct
+    ,aes(label=LabelName),nudge_x=-0.3,nudge_y=0.0,segment.color="grey50") +
+  geom_text_repel(data=thispdat%>%filter(Shifted=="Shifted")%>%
+      filter(Class=="Negative regulation\nof gluconeogenesis")%>%
+      select(Shifted,LogMiddle,LabelName)%>%distinct
+    ,aes(label=LabelName),nudge_x=-0.3,nudge_y=0.0,segment.color="grey50") 
+fig5lsmViolinVert
+
+thispdat <- filteredFits %>%
+  filter(Common%in%c("HIS3"
+      ,"RIM15","NPR2","TCO89","IGO1","IGO2","SLG1"
+      )
+    )%>%
+  mutate(Class="z")%>%
+  mutate(Class=ifelse(grepl("HIS3",Common),"Wild-type",Class))%>%
+#  mutate(Class=ifelse(grepl("(LSM1)|(LSM6)|(PAT1)",Common)
+#      ,"Lsm1-7p/Pat1p complex",Class)
+#    ) %>%
+#  mutate(Class=ifelse(grepl("(EDC3)|(SCD6)",Common)
+#      ,"Decapping modulator",Class)
+#    ) %>%
+  mutate(Class=relevel(factor(Class),"Wild-type"))
+violintest <- gbase+
+  scale_color_manual("",values=c("black",cbPalette[3:length(cbPalette)]))+
+  geom_point(data=thispdat%>%select(Shifted,LogMiddle,Class)%>%distinct
+    ,aes(col=Class))+
+  geom_line(data=thispdat%>%select(Shifted,Strain,LogMiddle,Class)%>%distinct
+    ,aes(col=Class,group=Strain))+
+  geom_text_repel(data=thispdat%>%filter(Shifted=="PreShift")%>%
+      filter(Class!="Negative regulation\nof gluconeogenesis")%>%
+      select(Shifted,LogMiddle,LabelName)%>%distinct
+    ,aes(label=LabelName),nudge_x=0.3,nudge_y=0.0,segment.color="grey50") +
+  geom_text_repel(data=thispdat%>%filter(Shifted=="Shifted")%>%
+      filter(Class=="Negative regulation\nof gluconeogenesis")%>%
+      select(Shifted,LogMiddle,LabelName)%>%distinct
+    ,aes(label=LabelName),nudge_x=-0.3,nudge_y=0.0,segment.color="grey50") 
+violintest
+
+thispdat <- filteredFits %>%
+  filter(Common%in%c("HIS3"
+      ,"LSM1","LSM6","PAT1","EDC3","SCD6"
+      )
+    )%>%
+  mutate(Class=NA)%>%
+  mutate(Class=ifelse(grepl("HIS3",Common),"Wild-type",Class))%>%
+  mutate(Class=ifelse(grepl("(LSM1)|(LSM6)|(PAT1)",Common)
+      ,"Lsm1-7p/Pat1p complex",Class)
+    ) %>%
+  mutate(Class=ifelse(grepl("(EDC3)|(SCD6)|(VTS1)",Common)
+      ,"Decapping modulator",Class)
+    ) %>%
+  mutate(Class=relevel(factor(Class),"Wild-type"))
+preziLsm <- filteredFits %>% 
+  mutate(Shifted=relevel(factor(Shifted),"PreShift"))%>%
+  ggplot()+theme_classic()+
+  aes(x=Shifted,y=exp(LogMiddle))+
+  scale_y_log10(breaks=commonGAP1breaks)+
+  ylab("Mean GAP1 signal\nof modeled distribution (a.u.)")+
+  geom_violin(adjust=0.2)+
+  xlab(NULL)+
+  scale_x_discrete(labels=c(PreShift="Pre-upshift",
+      Shifted="Post-upshift"))+
+  scale_color_manual("",values=c("black",cbPalette[3:length(cbPalette)]))+
+  geom_point(data=thispdat%>%select(Shifted,LogMiddle,Class)%>%distinct
+    ,aes(col=Class))+
+  geom_line(data=thispdat%>%select(Shifted,Strain,LogMiddle,Class)%>%distinct
+    ,aes(col=Class,group=Strain))+
+  geom_text_repel(data=thispdat%>%filter(Shifted=="PreShift")%>%
+      filter(Class!="Negative regulation\nof gluconeogenesis")%>%
+      select(Shifted,LogMiddle,LabelName)%>%distinct
+    ,aes(label=LabelName),nudge_x=-0.3,nudge_y=0.0,segment.color="grey50")+
+  theme(legend.position="bottom")
+preziLsm
+
+```
+
+# qPCR checking
+
+
+```{r}
+library(ggrepel)
+
+normRatioFirst <- read_csv("../data/qPCRfollowUp/qPCRdatasheet.csv")%>%
+  filter(!is.na(Strain))%>%
+  dplyr::select(-Alias)%>%gather(Gene,Ct,GAP1,HTA1)%>%
+  mutate(RelConc=2^-Ct)%>%dplyr::select(-Ct)%>%
+  group_by(Strain,Timepoint,Plate,Gene,`Sampling Date`)%>%
+  nest(RelConc)%>%spread(Gene,data)%>%unnest(.sep="_")%>%
+  group_by(Strain,Timepoint,Plate,`Sampling Date`)%>%
+  mutate(Ratio=GAP1_RelConc/HTA1_RelConc)%>%
+  select(-GAP1_RelConc,-HTA1_RelConc)
+normRatioFirst <- normRatioFirst %>% left_join(
+    normRatioFirst %>%filter(Strain=="FY4",Timepoint==0)%>%
+      group_by(Plate)%>%
+      dplyr::summarize(FY4_Ratio=mean(Ratio,na.rm=T))
+    ,by=c("Plate") 
+    ) %>%
+  group_by(Strain,Timepoint,Plate,`Sampling Date`) %>%
+  mutate(NormalizedRatio=Ratio/FY4_Ratio) %>%ungroup()%>%
+  mutate(Strain=str_replace(Strain,"KO",""))%>%
+  mutate(Strain=ifelse(grepl("DGY",Strain),Strain,str_c(tolower(Strain),"Δ")))%>% 
+  mutate(Strain=ifelse(grepl("fy4",Strain),"Wild-type",Strain)) %>% 
+  filter(!grepl("gap1",Strain))%>%
+  mutate(Class="Other")%>%
+  mutate(Class=ifelse(grepl("Wild-type",Strain),"Wild-type",Class))%>%
+  mutate(Class=ifelse(grepl("(lsm1)|(lsm6)|(pat1)",Strain)
+      ,"Lsm1-7p/Pat1p complex",Class)
+    ) %>%
+  mutate(Class=ifelse(grepl("(edc3)|(scd6)",Strain)
+      ,"Decapping modulator",Class)
+    ) %>%
+  mutate(Class=ifelse(grepl("(ccr4)|(pop2)",Strain)
+      ,"Ccr4-Not deadenylation",Class)
+    ) %>%
+  mutate(Class=ifelse(grepl("DGY",Strain)
+      ,"UTR mutant",Class)
+    ) %>%
+  mutate(Strain=ifelse(grepl("DGY",Strain)
+    ,c(`DGY577_GAP1_3'UTRdel`="gap1-3'UTRΔ150bp"
+      ,`DGY578_GAP1_5'UTRdel`="gap1-5'UTRΔ100bp"
+      ,`DGY539_GAP1_5'UTRdel`="gap1-5'UTRΔ152bp")[Strain] 
+    ,Strain))%>%
+  mutate(Class=relevel(factor(Class),"Wild-type"))
+
+plotqPCR <- function(geneset) {
+  pdat <- normRatioFirst %>% filter(Strain%in%geneset)%>% ungroup%>%
+    dplyr::select(Plate)%>% left_join(normRatioFirst,by="Plate")%>%
+    filter(Strain%in%c(geneset,"Wild-type"))%>% 
+    arrange(Strain)%>%# arrange(desc(Strain))%>%
+    mutate(Strain=relevel(factor(Strain),"Wild-type"))%>%distinct
+  g <- pdat %>% ggplot()+theme_bw()+
+    aes(x=as.numeric(Timepoint),y=NormalizedRatio
+      ,col=Strain,group=Strain,linetype=Strain,pch=Strain)+
+    theme(text=element_text(size=10))+
+    stat_smooth(size=0.3,method="lm",se=F)+
+    geom_point(size=2.0,alpha=1.0,position=position_dodge(width=0.5))+
+    scale_y_log10(breaks=c(0.05,0.1,0.2,0.5,1.0,1.5,2.0))+
+    scale_x_continuous(breaks=c(0,10))+
+    scale_linetype_manual("",values=c("solid","longdash","dotted","dotdash"))+
+    guides(pch=guide_legend(title=""),col=guide_legend(title=""))+
+    xlab("Minutes")+ylab(expression(paste(italic(GAP1)," / ",italic(HTA1))))
+  lmz <- lm(data=pdat,formula=log(NormalizedRatio)~
+              Timepoint+Timepoint:Strain+Strain)%>%summary() 
+  return(list(g,lmz))
+}
+plotqPCR(c("lsm1Δ","lsm6Δ"))[[1]]
+plotqPCR(c("lsm1Δ","lsm6Δ"))[[2]]
+
+ccr4pop2xrn1 <- plotqPCR(c("ccr4Δ","pop2Δ","xrn1Δ"))[[1]]+
+  scale_color_manual("Strain",values=c("black","red","purple","green"))
+ccr4pop2xrn1
+plotqPCR(c("ccr4Δ","pop2Δ","xrn1Δ"))[[2]]
+
+g <- plotqPCR(c("rpb4Δ"))[[1]]+
+  scale_color_manual("Strain",values=c("black","red","purple"))
+g
+plotqPCR(c("rpb4Δ"))[[2]]
+
+g <- plotqPCR(c("dal80Δ"))[[1]]+
+  scale_color_manual("Strain",values=c("black","red","purple"))
+g
+plotqPCR(c("dal80Δ"))[[2]]
+
+g <- plotqPCR(c("pat1Δ"))[[1]]+
+  scale_color_manual("Strain",values=c("black","red","purple"))
+g
+plotqPCR(c("pat1Δ"))[[2]]
+
+lsm1lsm6 <- plotqPCR(c("lsm1Δ","lsm6Δ"))[[1]]+
+  scale_color_manual("Strain",values=c("black","red","blue"))
+lsm1lsm6
+plotqPCR(c("lsm1Δ","lsm6Δ"))[[2]]
+
+edc3scd6 <- plotqPCR(c("edc3Δ","scd6Δ","tif4632Δ"))[[1]]+
+  scale_color_manual("Strain",values=c("black","#1b9e77","#d95f02","#7570b3"))
+edc3scd6
+plotqPCR(c("edc3Δ","scd6Δ","tif4632Δ"))[[2]]
+
+bothutr <- plotqPCR(c("gap1-5'UTRΔ100bp","gap1-5'UTRΔ152bp"
+      ,"gap1-3'UTRΔ150bp"))[[1]]+
+  scale_color_manual("Strain",values=c("black","blue","forestgreen","red"))
+bothutr
+plotqPCR(c("gap1-5'UTRΔ152bp","gap1-5'UTRΔ100bp"
+    ,"gap1-3'UTRΔ150bp"))[[2]]
+
+g <- plotqPCR(c("gap1-5'UTRΔ100bp"#,"gap1-5'UTRΔ152bp",
+      ,"gap1-3'UTRΔ150bp"))[[1]]+
+  scale_color_manual("Strain",values=c("black","purple","forestgreen"))
+g
+plotqPCR(c("gap1-5'UTRΔ152bp","gap1-5'UTRΔ100bp"
+    ,"gap1-3'UTRΔ150bp"))[[2]]
+```
+
+```{r}
+
+fig5 <- cowplot::plot_grid(
+  cowplot::plot_grid(fig5lsmViolin+theme(legend.position="bottom")
+    ,ccr4pop2xrn1+
+      guides(col=guide_legend(title="",ncol=2),linetype=guide_legend(title="",ncol=2),pch=guide_legend(title="",ncol=2))+
+      theme(legend.position="bottom")
+    ,NULL,labels=c("A","B"),ncol=3,rel_widths=c(0.7,0.35,0.04))
+  ,cowplot::plot_grid(
+    lsm1lsm6 +
+      guides(col=guide_legend(title="",ncol=2),linetype=guide_legend(title="",ncol=2),pch=guide_legend(title="",ncol=2))+
+      theme(legend.position="bottom")
+    ,edc3scd6+
+      guides(col=guide_legend(title="",ncol=2),linetype=guide_legend(title="",ncol=2),pch=guide_legend(title="",ncol=2))+
+      theme(legend.position="bottom")
+    ,g+
+      guides(col=guide_legend(title="",ncol=2),linetype=guide_legend(title="",ncol=2),pch=guide_legend(title="",ncol=2))+
+      theme(legend.position="bottom")
+    ,NULL
+    ,labels=c("C","D","E")
+    ,rel_widths=c(1.0,1.0,1.0,0.25)
+    ,hjust=0.13
+    ,vjust=1.0
+    ,ncol=4
+    ,axis="bt",align="h"
+    )
+  ,rel_heights=c(0.5,0.5)
+  ,labels=c("")
+  ,ncol=1)
+fig5
+
+ggsave("../output/Figure5.un.tiff",fig5,width=7.5,height=7)
+
+ggsave("../output/Figure5_S_bothutr.un.tiff",bothutr,width=4,height=4)
+
+```
+
+```{r,suppOfXrn1Etc,cache=F}
+dme209pdat_spread <- modelingdat %>% 
+  filter(Metric=="EstInput",FACSGate!="input") %>%
+  dplyr::select(-Metric,-Signal,-PropSignal) %>%
+  unite(Key,BiologicalReplicate,Shifted,MeanSignalInBin,FACSGate
+    ,PCRreplicate,UpperBound,LowerBound) %>%
+  spread(Key,PsuedoEvents,fill=0) %>%
+  gather(Key,PsuedoEvents,-Strain,-Common) %>% 
+  separate(Key,into=c("BiologicalReplicate","Shifted"
+    ,"MeanSignalInBin","FACSGate","PCRreplicate"
+    ,"UpperBound","LowerBound"),"_") %>% 
+  dplyr::select(-PCRreplicate) 
+
+dme209pdat <- dme209pdat_spread %>%
+  group_by(Strain,Common,Shifted,BiologicalReplicate,FACSGate)%>%
+#  nest(LowerBound,UpperBound,.key="gatez")%>%
+  mutate(MeanPsuedoEvents=mean(PsuedoEvents,na.rm=T))%>%
+  group_by(Strain,Common,Shifted,BiologicalReplicate)%>%
+  mutate(NormMeanPsuedoEvents=MeanPsuedoEvents/sum(unique(MeanPsuedoEvents),na.rm=T))%>%
+  ungroup()%>%
+  mutate(Name=str_c(tolower(Common),"Δ")
+    ,MeanSignalInBin=as.numeric(MeanSignalInBin))%>%
+  distinct%>%arrange(Shifted)
+
+boundslist <- modelingdat %>% 
+  dplyr::select(Shifted,FACSGate,LowerBound,UpperBound) %>%
+  distinct%>%filter(FACSGate!="input")%>%
+  mutate(GateIndex=c(p2=1,p3=2,p4=3,p5=4
+    ,p6=1,p7=2,p8=3,p9=4)[as.character(FACSGate)]
+    ) %>% 
+  group_by(Shifted,GateIndex)%>%
+  summarize(BoundsVector=list(
+      c(LowerBound=LowerBound,UpperBound=UpperBound)
+      )
+    ) %>%
+  group_by(Shifted) %>%
+  arrange(GateIndex)%>%
+  summarize(GateList=list(BoundsVector)) %>%
+  ungroup()%>%
+  summarize(ShiftList=list(setNames(GateList,nm=Shifted))) %>%
+  pull(ShiftList) %>% unlist(recursive=F)
+
+pintervalNormal <- function(gate,bounds,fitparm1,fitparm2) {
+  return(
+    pnorm(log(bounds[["UpperBound"]])
+      ,mean=fitparm1,sd=fitparm2
+      ) 
+    -
+    pnorm(log(bounds[["LowerBound"]])
+      ,mean=fitparm1,sd=fitparm2
+      ) 
+    )
+}
+
+fig5suppmodelFitsplotter <- function(toPlot=c("DAL80","GZF3","URE2","GAT1")) {
+  z<-dme209pdat %>% 
+    dplyr::select(-PsuedoEvents)%>%distinct%>%
+    filter(Common%in%toPlot) %>%
+    group_by(Strain,Common,Shifted,FACSGate,Name)%>%
+    mutate(MeanMeanPsuedoEvents=mean(MeanPsuedoEvents)
+      ,MeanMeanSignalInBin=mean(MeanSignalInBin))%>%
+    group_by(Strain,Common,Shifted,Name)%>%
+    mutate(NormMeanMeanPsuedoEvents=MeanMeanPsuedoEvents/sum(unique(MeanMeanPsuedoEvents)))%>%
+    mutate(LabelName=str_c(Name,", ",ifelse(Shifted=="Shifted","post-shift","pre-shift"))) %>%
+    mutate(LabelName=factor(LabelName
+        ,levels=unique(
+          c(str_c(tolower(toPlot),"Δ, pre-shift")
+            ,str_c(tolower(toPlot),"Δ, post-shift")
+            )
+          )
+        )
+      )%>%
+    left_join(
+      modelsToConsider%>%
+        filter(BiologicalReplicate=="Pooled")%>%
+        dplyr::select(Strain,Shifted,LogMiddle,LogSpread)
+      ,by=c("Strain","Shifted")
+      )%>%
+    group_by(Strain,Shifted,FACSGate)%>%
+    mutate(
+      GateIndex=recode(FACSGate,p2=1,p3=2,p4=3,p5=4,p6=1,p7=2,p8=3,p9=4)
+      ,sketch=list(data.frame(
+          x=log(mean(MeanSignalInBin))
+          ,y=pintervalNormal(NULL
+            ,boundslist[Shifted][[1]][GateIndex][[1]]
+            ,LogMiddle,LogSpread)
+          )
+        )
+      )
+  gatez <- z %>% dplyr::select(FACSGate,LabelName,UpperBound,LowerBound) %>%
+    mutate(UpperBound=as.numeric(UpperBound)
+      ,LowerBound=as.numeric(LowerBound))
+  g<-z%>%
+    ggplot()+theme_classic()+
+    facet_wrap(~LabelName,dir="h",nrow=2,scales="free_y")+
+    aes(x=MeanSignalInBin,y=NormMeanPsuedoEvents,col=BiologicalReplicate)+
+    scale_x_log10(breaks=commonGAP1breaks)+
+    coord_cartesian(xlim=c(1000,19.2e3))+
+    geom_vline(data=gatez,col="gray",aes(xintercept=UpperBound))+
+    geom_vline(data=gatez,col="gray",aes(xintercept=LowerBound))+
+    xlab("GAP1 FISH signal (a.u.)")+
+    scale_y_continuous(limits=c(0,NA))+
+    ylab("Mutant strain abundance in bin\n(normalized mean psuedoevents)")+
+    geom_hline(yintercept=0)+
+    theme(axis.line.x=element_blank()
+      ,axis.text.x=element_text(angle=90)
+      ,legend.position="bottom")+
+#    guides(col=F)+
+    scale_color_manual("Biological replicate",values=cbPalette)+
+    geom_point(data=z%>%unnest,aes(x=exp(x),y=y),col="black",shape=16,size=2.5)+
+    geom_line(data=z%>%unnest,aes(x=exp(x),y=y),col="black",linetype="dashed")+
+    geom_point() 
+}
+fig5suppmodelFits <- fig5suppmodelFitsplotter(c("XRN1","TCO89"))#,"NPR2","TCO89"))
+fig5suppmodelFits
+
+```
+
+```{r,printoutPage,cache=F,warning=F,error=F,message=F}
+ggsave("../output/Figure4_S_poorlyQuantifiedStrains.un.tiff"
+  ,fig5suppmodelFits,width=5,height=4)
+```
+
+How about ones that we couldn't model in the shifted because of crappy data?
+
+```{r,crappyQuants,fig.width=10,cache=T}
+rankingList %>% filter(is.na(Shifted))
+
+g <- fig5suppmodelFitsplotter((rankingList %>% filter(is.na(Shifted))%>%pull(Common))[1:6])
+g
+g <- fig5suppmodelFitsplotter((rankingList %>% filter(is.na(Shifted))%>%pull(Common))[-c(1:6)])
+g
+```
+
+```{r,pbodyMicroscopy,eval=F,include=F}
+# I had done this, but it's a big fat negative as has been reported
+# before, so I'm just going to save myself the trouble and cut it.
+
+# This chunk is very broken, but here in case you're interested.
+
+#library(png)
+#
+#img2tiling <- function(x){
+#  reshape2::melt(as.matrix(x[[1]]),varnames=c("y","x")
+#    ,value.name="value") %>% as.tibble
+#}
+#controlMicrographz <- tibble(Filename=list.files(pattern=".*png$"
+#    ,path="../data/dme238"
+#    ,full.names=T))%>%
+#  mutate(Treatment=ifelse(grepl("fn",Filename)
+#      ,"Exponential growth","Water shock"))%>%
+#  group_by(Filename) %>%
+#  mutate(Image=map(Filename,readPNG)) %>%
+#  mutate(TileData=list(img2tiling(Image)))%>%
+#  unnest(TileData)%>%ungroup()%>%
+#  mutate(ImgNumber=str_replace_all(str_match(Filename,"_\\d+_"),"_",""))%>%
+#  mutate(Identifier=str_c(Treatment,", ",ImgNumber))
+#
+#controlMicrographz%>%ggplot()+aes(x=value)+facet_wrap(~Treatment)+geom_histogram()
+#
+#figControlNoStress <- controlMicrographz%>%group_by(Identifier)%>%
+#  filter(Treatment=="Exponential growth")%>%
+#  mutate(scaledValue=value/max(value)*255)%>%
+#  arrange(Treatment)%>%
+#  ggplot()+theme_classic()+
+#  aes(x=as.numeric(x),y=as.numeric(y),fill=scaledValue)+geom_tile()+
+#  scale_fill_gradient(low="black",high="white")+
+#  facet_wrap(~Identifier)+
+#  guides(fill=F)+
+#  xlab(NULL)+ylab(NULL)+
+#  theme(axis.line.x=element_blank(),axis.ticks.x=element_blank()
+#    ,axis.text.x=element_blank()
+#    ,axis.text.y=element_blank()
+#    ,axis.line.y=element_blank(),axis.ticks.y=element_blank())
+##figControlNoStress
+#
+#figControlWaterStress <- controlMicrographz%>%group_by(Identifier)%>%
+#  filter(Treatment=="Water shock")%>%
+#  mutate(scaledValue=value/max(value)*255)%>%
+#  arrange(Treatment)%>%
+#  ggplot()+theme_classic()+
+#  aes(x=as.numeric(x),y=as.numeric(y),fill=scaledValue)+geom_tile()+
+#  scale_fill_gradient(low="black",high="white")+
+#  facet_wrap(~Identifier)+
+#  guides(fill=F)+
+#  xlab(NULL)+ylab(NULL)+
+#  theme(axis.line.x=element_blank(),axis.ticks.x=element_blank()
+#    ,axis.text.x=element_blank()
+#    ,axis.text.y=element_blank()
+#    ,axis.line.y=element_blank(),axis.ticks.y=element_blank())
+#figControlWaterStress
+#
+##savePage(
+##  cowplot::plot_grid(figControlNoStress,figControlWaterStress,ncol=1)
+##  ,"../supplement/figures/Figure5_S_PbodyControls.pdf"
+##  ,"Text")
+#```
+#
+#```{r,pbodyMicroscopyUpshift}
+#rm(controlMicrographz)
+#gc()
+#
+#img2tiling <- function(x){
+#  reshape2::melt(as.matrix(x[[1]]),varnames=c("y","x")
+#    ,value.name="value") %>% as.tibble
+#}
+#upshiftMicrographz <- tibble(Filename=list.files(pattern=".*png$"
+#    ,path="../data/dme240"
+#    ,full.names=T)) %>%
+#  mutate(Treatment=str_replace(str_extract(Filename,"dme240_\\d+.?_"),"dme240_",""))%>%
+#  mutate(Treatment=str_replace_all(Treatment,"_",""))%>%
+#  mutate(Treatment=ifelse(grepl("[ab]",Treatment)
+#    ,"Before upshift",str_c(Treatment," minutes after")))%>%
+#  mutate(Treatment=factor(Treatment,levels=c("Before upshift"
+#      ,"3 minutes after","6 minutes after","9 minutes after"
+#      ,"15 minutes after","20 minutes after")))%>%
+#  mutate(ImgNumber=as.numeric(str_replace_all(str_match(Filename,"_\\d+_"),"_","")))%>%
+#  mutate(Identifier=factor(str_c(Treatment,", ",ImgNumber))) %>%
+#  mutate(Image=map(Filename,readPNG)) %>%
+#  dplyr::select(-Filename)%>%
+#  group_by(Identifier)%>%
+#  mutate(TileData=list(img2tiling(Image)))%>%
+#  dplyr::select(-Image)%>% 
+#  unnest(TileData)%>%ungroup()%>%
+#  group_by(Identifier)%>%
+#  mutate(scaledValue=value/max(value)*255)
+#
+#upshiftMicrographz%>%ggplot()+aes(x=value)+facet_wrap(~Treatment)+geom_histogram()
+#
+#figUpshiftFirst10 <- upshiftMicrographz%>% arrange(Treatment)%>%
+#  filter(ImgNumber<11)%>%
+#  ggplot()+theme_classic()+
+#  aes(x=as.numeric(x),y=as.numeric(y),fill=scaledValue)+geom_tile()+
+#  scale_fill_gradient(low="black",high="white")+
+#  facet_wrap(~Identifier)+
+#  guides(fill=F)+
+#  xlab(NULL)+ylab(NULL)+
+#  theme(axis.line.x=element_blank(),axis.ticks.x=element_blank()
+#    ,axis.text.x=element_blank()
+#    ,axis.text.y=element_blank()
+#    ,axis.line.y=element_blank(),axis.ticks.y=element_blank())
+#figUpshiftFirst10
+#
+#figUpshiftNext10 <- upshiftMicrographz%>% arrange(Treatment)%>%
+#  filter(ImgNumber<11)%>%
+#  ggplot()+theme_classic()+
+#  aes(x=as.numeric(x),y=as.numeric(y),fill=scaledValue)+geom_tile()+
+#  scale_fill_gradient(low="black",high="white")+
+#  facet_wrap(~Identifier)+
+#  guides(fill=F)+
+#  xlab(NULL)+ylab(NULL)+
+#  theme(axis.line.x=element_blank(),axis.ticks.x=element_blank()
+#    ,axis.text.x=element_blank()
+#    ,axis.text.y=element_blank()
+#    ,axis.line.y=element_blank(),axis.ticks.y=element_blank())
+#figUpshiftNext10
+#
+#savePage(
+#  cowplot::plot_grid(figControlNoStress,figControlWaterStress,ncol=1)
+#  ,"../supplement/figures/Figure5_S_PbodyControls.pdf"
+#  ,"Text")
+```
+
+```{r}
+sessionInfo()
+```
+
+
+

@@ -1,0 +1,246 @@
+---
+title: "This makes Figure 3"
+author: "Darach"
+date: "`r Sys.Date()`"
+---
+
+
+```{r}
+library(tidyverse)
+library(stringr)
+library(tiff)
+load("../tmp/dme161flowdata.RData")
+load("../tmp/dme161gatez.RData")
+manualf6Counts <- read.delim("../data/dme161/microscopy/exp161f6manualQuant.tab")
+```
+
+```{r,cache=T}
+
+dme184datar <- 
+  tibble(Filename=str_c("../data/dme184/",
+    c("160530exp184round1.txt","160530exp184round2.txt")))%>%
+  group_by(Filename)%>%do(RawFile=read_csv(.$Filename,col_names=T))%>%
+  ungroup()%>%unnest()%>%
+  mutate(Conc=2^-cp)
+
+dme184datar %>% ggplot()+aes(y=cp,x=minutes)+geom_point()+
+  facet_wrap(strain~primers)
+
+dme184datar <- dme184datar %>% filter(strain!="rkr1",cp<30)
+
+dme184datar %>% ggplot()+aes(y=Conc,x=minutes)+geom_point()+
+  facet_wrap(strain~primers)
+
+dme184datarNormed <- dme184datar %>% 
+  group_by(strain,minutes,primers) %>% 
+  summarize(MeanConc=mean(Conc))%>%
+  group_by(strain)%>%do(spread(.,primers,MeanConc)%>%
+    group_by(minutes) %>%
+    summarize(NormMeanConc=`gap1`/`1200`)%>%ungroup()%>%
+    select(minutes,NormMeanConc))%>%
+  ungroup()%>%
+  mutate(strain=factor(strain,c("fy4","asc1")))
+
+summary(lm(data=dme184datarNormed%>%filter(minutes>2),
+  log(NormMeanConc)~minutes*strain))
+
+```
+
+And we're ignoring the asc1 result. This experiment was the 
+confirmation of a previous one, and it's super interesting, but
+we never followed up on it. 
+
+
+```{r}
+
+fig3a <- dme184datarNormed%>%filter(strain=="fy4")%>%
+  ggplot()+theme_classic()+
+  aes(x=minutes,y=log(NormMeanConc))+
+  geom_point()+scale_x_continuous(breaks=seq(0,12,2))+
+  stat_smooth(data=dme184datarNormed%>%filter(strain=="fy4",minutes>2),
+    method="lm",se=F,size=0.5,linetype="dashed",col="black")+
+#  annotate(label="specific degradation -0.54\n1.28 minute half-life",
+#    x=3,y=-5,geom="label")+
+  scale_color_discrete("",labels=c("wild-type","asc1 KO"))+
+#  ylab("ln ( GAP1 mRNA /\n spike-in )")+
+  ylab(expression(atop(paste("ln(",italic(GAP1)," mRNA /"," spike-in)"))))+
+  xlab("Post up-shift (minutes)")+
+  theme(legend.position="bottom")
+fig3a
+
+
+```
+
+```{r,exploreAndGate3,cache=T}
+
+fig3b <- gated161Datar %>% 
+  filter(Pacific.Blue.A>(400-minPb),
+    DAPI=="DAPI",LabelProbe=="Label Probe",
+    SampleTime<30) %>%
+  ggplot(aes(x=APC.A,y=..density..))+
+    theme_classic()+
+    geom_vline(data=dme161gatez,aes(xintercept=UpperBound),
+      col="gray",alpha=1.0)+
+    geom_text(data=dme161gatez%>%ungroup()%>%
+        mutate(BinName=str_c("Gate",c(A="1",B="2",C="3",D="4")[
+          sub("Sort Bin ","",BinName)]))%>%
+        group_by(BinName)%>%mutate(BinAvg=mean(c(BinAvg,UpperBound))),
+      aes(x=BinAvg,y=1.5,label=BinName),angle=45,nudge_x=-0.13)+
+    stat_bin(bins=100,position="identity",alpha=0.80,geom="line",
+      aes(col=factor(SampleTime):factor(TargetProbe)))+
+    stat_bin(bins=100,position="identity",alpha=0.80,geom="point",
+      aes(col=factor(SampleTime):factor(TargetProbe)))+
+    scale_color_discrete(NULL,labels=c(
+        `0:No Target`="0 min, no probe",
+        `0:Target Probe`="0 min",
+        `2.65:Target Probe`="2.7 min after upshift",
+        `12.6:Target Probe`="12.6 min after upshift"
+      ))+
+    guides(col=guide_legend(ncol=2))+
+    scale_x_log10(breaks=10^(0:5))+
+    coord_cartesian(xlim=c(1e2,1e4))+
+    theme(axis.text.x=element_text(angle=90)
+      ,axis.text.y=element_blank()
+      ,legend.position="top")+
+    ylab("Density")+xlab(expression(paste(italic(GAP1)," mRNA FISH (arbitrary units, a.u.)")))
+fig3b
+
+```
+
+```{r,cache=T}
+
+manualf6Counts %>% 
+  aov(formula=dots~f6frac) %>% summary
+
+manualf6Counts %>% 
+  mutate(GateIndex=c(a=1,b=2,c=3,d=4)[f6frac])%>%
+  lm(formula=dots~GateIndex) %>% summary
+
+fig3d <- ggplot(manualf6Counts)+theme_classic()+
+  aes(x=f6frac,y=(dots))+
+  geom_point(data=manualf6Counts%>%group_by(f6frac)%>%
+      summarize(meanz=mean(dots)),
+    col="red",aes(x=f6frac,y=meanz),size=3)+
+  geom_dotplot(binaxis="y",position="dodge",
+    stackdir="center",dotsize=0.25,binwidth=1)+
+  theme(panel.grid.major.y=element_line(color="gray")
+    ,axis.text.x=element_text(color="black"))+
+#  geom_text(data=manualf6Counts%>%group_by(f6frac)%>%
+#      summarize(dots=signif(mean(dots),3)),
+#    col="black",aes(x=f6frac,y=dots,label=str_c("Mean\n",dots)),
+#      nudge_x=.5)+
+  scale_x_discrete(labels=c(a="Gate1",b="Gate2",c="Gate3",d="Gate4"))+
+  coord_cartesian(xlim=c(1,4.25))+
+  ylab("Foci per cell")+
+  xlab("")#Sorted bins\n( arranged low -> high GAP1 signal )")
+fig3d
+
+```
+
+
+```{r}
+#fig3c microscopy
+img2tiling <- function(x){
+  reshape2::melt(as.matrix(x[[1]]),varnames=c("y","x")
+    ,value.name="value") %>% as.tibble
+}
+micrographz <- tibble(Filename=list.files(pattern=".*tif$"
+    ,path="../data/dme161/microscopy/exp161f6/representativeImages"
+    ,full.names=T))%>%
+  mutate(Gate=factor(sub(".*(Gate\\d)_.*","\\1",Filename))
+    ,Channel=factor(sub(".*Gate\\d_([^-]*)_.*","\\1",Filename)))%>%
+  group_by(Filename) %>%
+  mutate(Image=map(Filename,readTIFF)) %>%
+  mutate(Image=ifelse(Gate=="Gate4"
+      ,list(Image[[1]][13:min(61+13,nrow(Image[[1]])),13:min(58+13,ncol(Image[[1]]))])
+      ,list(Image[[1]][05:min(61+05,nrow(Image[[1]])),05:min(58+05,ncol(Image[[1]]))])
+    ))%>%
+  mutate(TileData=list(img2tiling(Image)))%>%
+  unnest(TileData)%>%ungroup()%>%
+  mutate(Channel=ifelse(Channel=="BrightField","Visible",as.character(Channel)))%>%
+  mutate(Channel=relevel(factor(Channel),"Visible"))%>%
+  group_by(Channel)%>%mutate(value=value/max(value))
+micrographz
+
+micrographz%>%ggplot()+aes(x=value)+facet_grid(Channel~Gate)+geom_histogram()
+
+micrographz%>%group_by(Gate,Channel)%>%summarize(min(x),max(x),min(y),max(y))
+
+micrographz%>%ggplot()+aes(x=value)+facet_grid(Channel~Gate)+geom_histogram()
+
+fig3c <- micrographz%>%group_by(Channel)%>%
+  mutate(scaledValue=value/max(value)*255)%>%
+  ggplot()+theme_classic()+
+  aes(x=as.numeric(x),y=as.numeric(y),fill=scaledValue)+geom_tile()+
+  scale_fill_gradient(low="black",high="white")+
+  facet_grid(Channel~Gate,switch="both")+
+  guides(fill=F)+
+  xlab(NULL)+ylab(NULL)+
+  theme(axis.line.x=element_blank(),axis.ticks.x=element_blank()
+    ,axis.text.x=element_blank()
+    ,axis.text.y=element_blank()
+    ,axis.line.y=element_blank(),axis.ticks.y=element_blank())
+fig3c
+
+```
+
+
+```{r,eval=F,include=F}
+library(cowplot)
+library(magick)
+
+micrographz <- tibble(Filename=list.files(pattern=".*tif$"
+    ,path="../data/dme161/microscopy/exp161f6/representativeImages"
+    ,full.names=T)) %>%
+  mutate(Gate=factor(sub(".*(Gate\\d)_.*","\\1",Filename))
+    ,Channel=factor(sub(".*Gate\\d_([^-]*)_.*","\\1",Filename)))%>%
+  group_by(Filename) %>%
+  mutate(RawImage=list(image_read(Filename))) %>%
+  mutate(Image=ifelse(Gate=="Gate4"
+    ,map(RawImage,image_crop, "60x60+10+13")
+    ,map(RawImage,image_crop, "60x60+7+7"))) %>%
+  mutate(Image=map(Image,image_convert, "png"))
+
+g <- micrographz%>%ggplot()+geom_blank()+facet_grid(Channel~Gate)
+
+ggdraw()+
+  draw_plot(g)+
+draw_image(micrographz$Image[[1]])
+
+fig3c <- micrographz%>%group_by(Channel)%>%
+  mutate(scaledValue=value/max(value)*255)%>%
+  ggplot()+theme_classic()+
+  aes(x=as.numeric(x),y=as.numeric(y),fill=scaledValue)+geom_tile()+
+  scale_fill_gradient(low="black",high="white")+
+  facet_grid(Channel~Gate,switch="both")+
+  guides(fill=F)+
+  xlab(NULL)+ylab(NULL)+
+  theme(axis.line.x=element_blank(),axis.ticks.x=element_blank()
+    ,axis.text.x=element_blank()
+    ,axis.text.y=element_blank()
+    ,axis.line.y=element_blank(),axis.ticks.y=element_blank())
+fig3c
+```
+
+
+
+
+```{r}
+null <- ggplot()+theme_void()
+
+fig3a <- fig3a+theme(plot.margin=unit(c(0.5,0,0,0.7),"cm"))
+fig3c <- fig3c+theme(plot.margin=unit(c(0.5,0,0,0.7),"cm"))
+g<- cowplot::plot_grid(fig3a,fig3c,fig3b,fig3d
+  ,ncol=2,labels=c("A","C","B","D")
+  ,align="h",axis="b"
+  ,rel_heights=c(0.4,0.6))
+g
+
+ggsave("../output/Figure3.un.tiff",g,width=7,height=6)
+
+```
+
+```{r}
+sessionInfo()
+```
+

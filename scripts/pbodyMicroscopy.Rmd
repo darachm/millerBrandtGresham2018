@@ -1,0 +1,58 @@
+---
+title: "This makes a supplementary figure of the pbody images"
+author: "Darach"
+date: "`r Sys.Date()`"
+---
+
+
+```{r}
+library(tidyverse)
+library(cowplot)
+
+g <- plot_grid( 
+  plot_grid( 
+    plot_grid( 
+      ggdraw()+draw_label("Exponential growth, YPD",size=08)
+      ,ggdraw()+draw_label("10 minutes in water",size=08)
+      ,ncol=5
+      )
+    ,plot_grid( 
+      ggdraw()+draw_image("../data/dme238dme240/dme238_ypd.png")
+      ,ggdraw()+draw_image("../data/dme238dme240/dme238_water.png") 
+      ,ncol=5
+      )
+    ,ncol=1,rel_heights=c(0.2,0.8)
+    )
+  ,plot_grid(
+    NULL
+    ,plot_grid(
+      ggdraw()+draw_label("Before upshift",size=08)
+      ,ggdraw()+draw_label("Before upshift",size=08)
+      ,ggdraw()+draw_label("10 minutes after upshift",size=08)
+      ,ggdraw()+draw_label("19 minutes after upshift",size=08)
+      ,ggdraw()+draw_label("25 minutes after upshift",size=08)
+      ,ncol=5
+      )
+    ,plot_grid(
+      ggdraw()+draw_image("../data/dme238dme240/dme240_sample_0a.png")
+      ,ggdraw()+draw_image("../data/dme238dme240/dme240_sample_0b.png")
+      ,ggdraw()+draw_image("../data/dme238dme240/dme240_sample_6.png")
+      ,ggdraw()+draw_image("../data/dme238dme240/dme240_sample_15.png")
+      ,ggdraw()+draw_image("../data/dme238dme240/dme240_sample_20.png")
+      ,ncol=5
+      )
+    ,ncol=1,rel_heights=c(0.2,0.2,0.8)
+    )
+  ,ncol=1,rel_heights=c(0.4,0.6)
+  )
+g
+ggsave("../output/Figure5_S_pbodyMicroscopy.png",g,width=7.5,height=4)
+ggsave("../output/Figure5_S_pbodyMicroscopy.un.tiff",g,width=7.5,height=4)
+
+
+```
+
+
+
+
+

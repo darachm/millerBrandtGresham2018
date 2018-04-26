@@ -1,0 +1,201 @@
+---
+title: "modeling dme211 data"
+author: "darach miller"
+date: "`r Sys.Date()`"
+---
+
+Let's read in the data, `datarForModeling`, 
+and use that for modeling with the model where we just ask if 
+there's a change in slope.
+
+```{r,readingIn,cache=F}
+load(file="../tmp/dme211datarForModeling.RData")
+load(file="../tmp/dme211datarForModelingDirect.RData")
+load(file="../tmp/dme211normalizedData.RData")
+load("../tmp/NameIDList.RData")
+```
+
+```{r,libz}
+library(plyr)
+library(tidyverse)
+library(knitr)
+library(stringr)
+library(qvalue)
+```
+
+Here we're going to model the decrease in reads mapping to each
+transcript relative to the synthetic spikeins. To do that, we'll
+subtract 12.5 min from glutamine shift to set the glutamine shift 
+time as $t_0$. In the actual experiment, I accidentally added the 
+water pulse at 13min. Since this is our negative control, I'm going
+to treat that shift time as 12.5min, but it is slightly off. I belive
+this is the best way to handle that discrepancy, and I don't think
+it will affect our conclusions. But just to be clear, I'm using
+the glutamine shift time of 12.5 minutes and the water was added
+at 13min...
+
+The model is take the data and fit with linear model:
+
+    log(normed) ~ min + min:treated
+
+Where `normed` is the reads relative to spikeins, and `treated` 
+as being glutamine treatment and after it's added.
+We have "direct" normalization (divide by counts within sample)
+for all timepoints, and "model" normalization 
+(divide by model of spike-ins proportions increasing with time)
+for all but the 12 samples, which are 40 minutes out and don't
+look like there's still a label chase going on.
+
+How does this sorta look, on a few genes basis?
+
+```{r,drawMod,cache=T,fig.height=03}
+ggDrawAccelMod <- function(x,whichNorm="NormedModel",breakpoint=12.5) {
+  x$Abundance <- (x%>%select_(whichNorm))[[1]] 
+  x <- subset(x,Abundance!=0)
+  x$Minutes <- x$Minutes-breakpoint
+  mod <- lm(data=x,log(Abundance)~Minutes+Minutes:Treated)
+  print(unique(x$Common))
+  return(ggplot(x)+
+    aes(x=Minutes+breakpoint,y=log(Abundance),col=Treatment,
+      group=Treatment=="q"&Minutes>0)+  
+    geom_point()+geom_vline(xintercept=breakpoint,linetype="dashed")+
+    geom_line(data=data.frame(Abundance=exp(mod$fitted.values),
+       Minutes=x$Minutes,Treatment=x$Treatment,
+       Treated=x$Treated),
+      aes(group=Treated))+
+    ggtitle(unique(x$Common))+
+    xlab("Minutes of chase")+ylab("log( abundance, normalized )")
+  )}
+
+ggDrawAccelMod(datarForModeling%>%filter(Common=="GAP1"))
+ggDrawAccelMod(datarForModeling%>%filter(Common=="HTA1"))
+ggDrawAccelMod(datarForModeling%>%filter(Common=="GUA1"))
+```
+
+First, fit them all.
+
+```{r,modelprelim,cache=F}
+is.tryerror <- function(x) {
+  return(methods::is(x)[1]=="try-error")
+}
+```
+
+And modeling with `dlply` because I wrote this for `dlply`, I like
+`dlply`, and I don't really like the `purrr`-centered modeling
+in the tidyverse approach right now. Maybe I'm doing it wrong...
+
+```{r,modelit,cache=T,warning=F,error=F}
+modelzAltNorm <- dlply(datarForModeling,
+    .(Systematic),function(x){
+  x$Abundance <- x$NormedModel
+  dat <- subset(x,Abundance!=0)
+  dat$Minutes <- dat$Minutes - 12.5
+  tmp <- try(lm(data=dat,
+    log(Abundance)~Minutes+Minutes:Treated))
+  return(tmp)
+})
+```
+
+Then we extract the summary of fits, and the pvals by t-test of
+each parameter, and we adjust each by qvalue with Storey's package.
+
+```{r,modeldf,cache=T,warning=F}
+modelzAltNorm <- modelzAltNorm[!unlist(lapply(modelzAltNorm,is.tryerror))]
+maudzAltNorm <- ldply(modelzAltNorm,.id="Systematic",function(x){
+    return(data.frame(Variable=rownames(summary(x)$coef)
+      ,summary(x)$coef,AdjR2=summary(x)$adj.r.squared))
+  })
+head(maudzAltNorm)
+dim(maudzAltNorm)
+quantile(maudzAltNorm$AdjR2,0.2) 
+```
+
+```{r,columnz,cache=T}
+maudzAltNorm <- maudzAltNorm %>% 
+  mutate(Variable=as.character(Variable),Systematic=as.character(Systematic)) %>%
+  mutate(Variable=ifelse(Variable=="Minutes","BasalRate",Variable)) %>% 
+  mutate(Variable=ifelse(Variable=="Minutes:TreatedTRUE","ChangeRate",Variable)) %>% 
+  select(Systematic,Variable,Estimate,Std..Error,t.value,Pr...t..,AdjR2)
+```
+
+```{r,qvalz,cache=T,fig.height=05}
+maudzAltNorm <- ddply(maudzAltNorm,.(Variable),function(x, ...){
+    tmpqval <- qvalue(x$Pr...t.., ...)
+    print(unique(x$Variable)[1])
+    plot(tmpqval)
+    x$QValue <- tmpqval$qvalues
+    return(x)
+  })
+maudzAltNorm%>%filter(Variable=="ChangeRate")%>%
+  ggplot()+aes(x=Pr...t..)+geom_histogram(bins=100)
+
+maudzAltNorm%>%filter(Variable=="ChangeRate")%>%
+  group_by(Estimate>0)%>%
+  summarize(Number=sum(QValue<0.05))
+
+maudzAltNorm%>%filter(Variable=="ChangeRate")%>%
+  group_by(Estimate>0)%>%
+  summarize(Number=sum(QValue<0.01))
+
+```
+
+```{r,directNormalizationModeling,cache=T}
+modelz <- dlply(datarForModelingDirect,.(Systematic),function(x){
+  x$Abundance <- x$NormedDirect
+  dat <- subset(x,Abundance!=0)
+  dat$Minutes <- dat$Minutes - 12.5
+  tmp <- try(lm(data=dat,
+    log(Abundance)~Minutes+Minutes:Treated))
+  return(tmp)
+})
+
+modelz <- modelz[!unlist(lapply(modelz,is.tryerror))]
+maudz <- ldply(modelz,.id="Systematic",function(x){
+    return(data.frame(Variable=rownames(summary(x)$coef)
+      ,summary(x)$coef,AdjR2=summary(x)$adj.r.squared))
+  })
+head(maudz)
+dim(maudz)
+
+maudz <- maudz %>% 
+  mutate(Variable=as.character(Variable),Systematic=as.character(Systematic)) %>%
+  mutate(Variable=ifelse(Variable=="Minutes","BasalRate",Variable)) %>% 
+  mutate(Variable=ifelse(Variable=="Minutes:TreatedTRUE","ChangeRate",Variable)) %>% 
+  select(Systematic,Variable,Estimate,Std..Error,t.value,Pr...t..,AdjR2)
+
+maudz <- ddply(maudz,.(Variable),function(x, ...){
+    tmpqval <- qvalue(x$Pr...t.., ...)
+    print(unique(x$Variable)[1])
+    plot(tmpqval)
+    x$QValue <- tmpqval$qvalues
+    return(x)
+  })
+
+maudz%>%filter(Variable=="ChangeRate")%>%
+  ggplot()+aes(x=Pr...t..)+geom_histogram(bins=100)
+
+maudz%>%filter(Variable=="ChangeRate")%>%
+  group_by(Estimate>0)%>%
+  summarize(Number=sum(QValue<0.05))
+
+maudz%>%filter(Variable=="ChangeRate")%>%
+  group_by(Estimate>0)%>%
+  summarize(Number=sum(QValue<0.01))
+```
+
+```{r}
+save(modelz,file="../tmp/dme211fitModelsDirect.RData")
+save(modelzAltNorm,file="../tmp/dme211fitModels.RData")
+save(maudz,file="../tmp/dme211fitMaudz.RData")
+save(maudzAltNorm,file="../tmp/dme211fitMaudzAltNorm.RData")
+```
+
+In the `dme211labelingDynamics` analysis (Rmd or HTML files), we
+investiage the possibility that rates are controlled by
+the incomplete chase and transcriptional changes.
+
+
+```{r}
+sessionInfo()
+```
+

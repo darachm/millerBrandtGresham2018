@@ -1,0 +1,167 @@
+---
+title: "Preliminary preliminary run of Quantigene probes, with a gap1 delete"
+author: Darach
+---
+
+
+```{r}
+require(tidyverse)
+require(flowCore)
+```
+
+```{r}
+
+datar <- list.files("../data/dme141",full.names=T) %>% 
+  {tibble(Filename=.)} %>%
+  group_by(Filename)%>%
+  mutate(Data=list(as_tibble(
+        exprs(read.FCS(Filename,transformation=F)))
+      ))%>%unnest%>%
+  mutate(Sample=c(
+    `DAPI + APC -`="Negative (no probe)"
+    ,`DAPI + APC +`="Proline-limited batch"
+    ,`KO`="Negative (gap1 KO)"
+    ,`Q`="Glutamine upshift, +20min")[
+      sub(".*_([^_]+).fcs","\\1",Filename)
+      ])%>%ungroup()%>%
+  dplyr::select(-Filename)
+
+range(datar$`APC-A`)
+range(datar$`Pacific Blue-A`)
+
+datar$`APC-A` <- datar$`APC-A` + 175
+datar$`Pacific Blue-A` <-  datar$`Pacific Blue-A` +615
+
+```
+
+```{r, warning=F, cache=T}
+tmp <- ggplot(datar[sample(1:nrow(datar)),])+theme_bw()
+tmp+aes(x=log(`Pacific Blue-A`),y=log(`APC-A`),color=Sample)+geom_point(size=.5,alpha=.5)
+```
+
+And now, a histogram and then an approach that uses binning so that we can 
+pull apart timepoints.
+
+```{r, warning=F,cache=T}
+hist(log(datar$`Pacific Blue-A`),100)
+hist(log(datar$`APC-A`),100)
+
+tmp+aes(x=log(`Pacific Blue-A`),col=factor(Sample))+
+	stat_bin(aes(y = ..ncount..),binwidth=0.05,geom="line",position="identity",cex=.5)+
+	stat_bin(aes(y = ..ncount..),binwidth=0.05,geom="point",position="identity",cex=2)+
+    scale_x_continuous(breaks=seq(5,11,0.5))+
+    theme(axis.text.x=element_text(angle=90))
+
+tmp+aes(x=log(`APC-A`),col=factor(Sample))+
+	stat_bin(aes(y = ..density..),binwidth=0.1,geom="line",position="identity",cex=.5)+
+	stat_bin(aes(y = ..density..),binwidth=0.1,geom="point",position="identity",cex=2)+
+    scale_x_continuous(breaks=seq(3,11,0.5))+
+    theme(axis.text.x=element_text(angle=90))
+```
+
+Now, we plot things against each other. RNA will be on Y, DNA on X.
+
+Before we try to get this to one dimensional plots, note that the DAPI signal
+shifts with the gap1KO or the glutamine pulse. Strange. We need to use this
+information in the gating.
+
+```{r,cache=F,warning=F,error=F}
+
+ggplot(subset(datar[sample(1:nrow(datar)),],
+		Sample%in%c("Negative (no probe)","Proline-limited batch")&
+		log(`Pacific Blue-A`)>7.5&log(`Pacific Blue-A`)<9.5)
+	)+
+	theme_bw()+
+	aes(x=log(`Pacific Blue-A`),y=log(`APC-A`))+
+	ylab("log Alexa647 (GAP1 mRNA)")+
+	xlab("log DAPI (DNA)")+
+	theme(legend.position="bottom")+
+	geom_point(size=1.0,alpha=.1)+
+	facet_wrap(~Sample)
+
+ggplot(subset(datar[sample(1:nrow(datar)),],
+		Sample%in%c("Negative (gap1 KO)","Glutamine upshift, +20min")&
+		log(`Pacific Blue-A`)>7.25&log(`Pacific Blue-A`)<9.5)
+	)+
+	theme_bw()+
+	aes(x=log(`Pacific Blue-A`),y=log(`APC-A`))+
+	ylab("log Alexa647 (GAP1 mRNA)")+
+	xlab("log DAPI (DNA)")+
+	theme(legend.position="bottom")+
+	geom_point(size=1.0,alpha=.1)+
+	facet_wrap(~Sample)
+
+subz <- subset(datar,
+		(Sample%in%c("Negative (no probe)","Proline-limited batch")&
+			log(`Pacific Blue-A`)>7.5&log(`Pacific Blue-A`)<9.5)
+		|
+		(Sample%in%c("Negative (gap1 KO)","Glutamine upshift, +20min")&
+			log(`Pacific Blue-A`)>7.25&log(`Pacific Blue-A`)<9.5)
+		)
+
+ggplot(subz)+
+	theme_bw()+
+	aes(x=log(`Pacific Blue-A`),y=log(`APC-A`))+
+	ylab("log Alexa647 (GAP1 mRNA)")+
+	xlab("log DAPI (DNA)")+
+	theme(legend.position="bottom")+
+	geom_point(size=1.0,alpha=.1)+
+	facet_wrap(~Sample)
+
+```
+
+Now that that's good, how does this look in one dimension?
+
+```{r,cache=F,warning=F,error=F}
+g <- subz %>% 
+    ggplot()+theme_bw()+
+	aes(x=log(`APC-A`),col=factor(Sample))+
+	xlab("log Alexa647 (GAP1 mRNA)")+
+	ylab("Count")+
+	theme(legend.position="bottom")+
+	stat_bin(aes(y = ..count..),binwidth=0.1,geom="line",position="identity",cex=.5)+
+	stat_bin(aes(y = ..count..),binwidth=0.1,geom="point",position="identity",cex=2)+
+    scale_color_discrete("")+
+	xlim(c(3.5,10))
+g
+```
+
+You'll note a few things. First, the population under induction 
+looks very very bimodal. I believe this is a technical issue of
+incomplete permeabilization, as it depends on fixation time. The 
+later experiments were run with a time optimized on a poly-dT
+probe, so I believe those results are much better. Do note that this
+was much earlier, so the flourophore is probably fresher here!
+
+Second, 20minutes after glutamine addition, it's still on? Nope, it
+was likely repressed and re-induced. One of the super cool things
+about this system is that GAP1 mRNA (and a bunch of other NCR)
+are reinduced starting at around 15min, then they come back on.
+We haven't even gotten past figuring out the first 10 minutes, so
+we haven't really looked at that yet.
+
+Anyways, for the supplemental figure I'm going to exclude the
+glutamine re-induction one. 
+
+```{r,cache=F,warning=F,error=F}
+g <- subz %>% dplyr::filter(Sample!="Glutamine upshift, +20min")%>%
+    ggplot()+theme_bw()+
+	aes(x=log(`APC-A`),col=factor(Sample))+
+	xlab(expression(paste("ln Alexa647 (",italic(GAP1)," mRNA)")))+
+	ylab("Count")+
+	theme(legend.position="bottom")+
+	stat_bin(aes(y = ..count..),binwidth=0.1,geom="line",position="identity",cex=.5)+
+	stat_bin(aes(y = ..count..),binwidth=0.1,geom="point",position="identity",cex=2)+
+    scale_color_discrete("",labels=c(
+      expression(paste(italic(gap1),Delta))
+      ,expression(atop(italic(GAP1)*", no probe","negative control"))
+      ,expression(atop(italic(GAP1)*", proline-limited","batch culture"))))+
+	xlim(c(3.5,10))
+g
+
+ggsave("../output/Figure3_S_gap1deleteControl.un.tiff"
+  ,g,width=5,height=5)
+
+```
+	
+

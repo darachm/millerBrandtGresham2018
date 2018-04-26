@@ -1,0 +1,79 @@
+---
+title: "Modeling the pulse-chase results to identify a proper cutoff"
+author: "Darach Miller"                                               
+date: "Typeset `r Sys.Date()`"
+---
+
+For a more in depth analysis, see the Supplementary material.
+
+```{r,libz,message=F,warning=F}
+library(plyr)
+library(tidyverse)
+library(knitr)
+library(stringr)
+library(qvalue)
+library(magrittr)
+```
+
+```{r,readingIn,cache=F}
+load(file="../tmp/dme211datarForModeling.RData")
+load(file="../tmp/dme211datarForModelingDirect.RData")
+load(file="../tmp/dme211fitMaudzAltNorm.RData")
+load(file="../tmp/dme211fitMaudz.RData")
+load(file="../tmp/dme211normalizedData.RData")
+load("../tmp/NameIDList.RData")
+```
+
+In the analysis detailed in the Supplementary material, we 
+identified a cut-off for the rate changes that will better
+select high-confidence destabilization events. Refer to that
+document for the reasoning, this one is just to fit into the pipeline
+nicely.
+
+```{r}
+bonafideAccelDegRates <- inner_join( maudzAltNorm%>%
+    filter(Variable=="ChangeRate"&Estimate<0&QValue<0.01)%>%
+    select(Systematic)
+  ,maudzAltNorm%>%filter(Variable!="(Intercept)")%>%
+  select(Systematic,Variable,Estimate)%>%
+  spread(Variable,Estimate)%>%filter(BasalRate-ChangeRate>0)
+  ,by="Systematic")
+bonafideAccelDeg <- bonafideAccelDegRates%>%
+  select(Systematic)%>%distinct()%>%unlist()
+bonafideAccelDegRates%>%
+  gather(Variable,Value,BasalRate,ChangeRate)%>%
+  ggplot()+aes(x=Value)+geom_histogram()+facet_grid(Variable~.)
+
+bonafideAccelDegRatesDirect <- inner_join( maudz%>%
+    filter(Variable=="ChangeRate"&Estimate<0&QValue<0.05)%>%
+    select(Systematic)
+  ,maudz%>%filter(Variable!="(Intercept)")%>%
+  select(Systematic,Variable,Estimate)%>%
+  spread(Variable,Estimate)%>%filter(BasalRate-ChangeRate>0)
+  ,by="Systematic")
+bonafideAccelDegDirect <- bonafideAccelDegRatesDirect%>%
+  select(Systematic)%>%distinct()%>%unlist()
+bonafideAccelDegRatesDirect%>%
+  gather(Variable,Value,BasalRate,ChangeRate)%>%
+  ggplot()+aes(x=Value)+geom_histogram()+facet_grid(Variable~.)
+
+tibble(Systematic=bonafideAccelDeg)%>%
+  left_join(maudzAltNorm,by="Systematic")%>%
+  filter(Variable!="(Intercept)")%>%
+  select(Systematic,Variable,Estimate)%>%
+  spread(Variable,Estimate)%>%distinct()
+```
+
+So, `r length(bonafideAccelDeg)` look accelerated more than
+can be explained by in-complete label chase in the water samples,
+and `r length(bonafideAccelDegDirect)` are in the direct 
+normalization, with lower confidence.
+
+```{r}
+save(list=c("bonafideAccelDeg","bonafideAccelDegDirect")
+  ,file="../tmp/dme211bonafideDegraders.RData")
+```
+
+```{r}
+sessionInfo()
+```

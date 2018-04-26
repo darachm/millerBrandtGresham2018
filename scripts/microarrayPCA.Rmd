@@ -1,0 +1,320 @@
+---
+title: "Doing PCA on the Airoldi et al 2016 microarray data"
+author: "Darach"
+date: "`r Sys.Date()`"
+---
+
+```{r,libs,cache=F}
+library(pcaMethods)
+library(tidyverse)
+library(ggrepel)
+library(stringr)
+```
+
+```{r, readindata,cache=T}
+load("../tmp/airoldiEtAl2016MBoCTableS7.RData")
+load("../tmp/NameIDList.RData")
+ts7 <- ts7 %>% filter(!is.na(Systematic))
+```
+
+`ts7` is now our supplementary table from AiroldiEtAl2016, but we've
+subset out the rows where Systematic name has been identified, which
+is simply excluding some probes that are only present in the batch
+upshift experiment. Different platform? Maybe also why it looks
+like it starts from a slightly different place in the PCA.
+
+Here we take out the data of steady-state growth at different rates
+on different sources, and then the small glutamine pulses. 
+There's a longterm, and a short timescale series. 
+We're going to show the short term because although the long term
+dynamics are super cool, we never followed up on this. Oh well.
+This analysis is now just really to see if the batch is similar to
+the chemostat, more than just changes in steady-state rate.
+
+```{r,pca,cache=T}
+ts7mat <- data.frame(ts7[,-c(1,2)])
+rownames(ts7mat) <- as.character(ts7$Systematic)
+
+smallQandSSandBatch <- ts7mat[,colnames(ts7mat)[
+    grepl("(D\\.0\\.)|(40uM.Glutamine.*)|(Batch.400uM.Gln)",
+    colnames(ts7mat))] ]
+smallQandSSandBatch <- smallQandSSandBatch[complete.cases(smallQandSSandBatch),]
+dim(smallQandSSandBatch)
+
+sqsbPca <- pca(object=t(smallQandSSandBatch), method="svd", nPcs=30, 
+  scale="uv", center=TRUE)
+```
+
+Below, we plot and subset out the components that explain more than
+1% of the variance, and use those in the construction of an object
+for plotting.
+
+```{r,preplot,cache=T}
+
+plot(log10(sqsbPca@R2));abline(h=log10(0.01))
+ninetyNineScores <- scores(sqsbPca)[,sqsbPca@R2>0.01]
+plotobj <- as_tibble(
+  data.frame(SampleNames=rownames(ninetyNineScores),
+    ninetyNineScores)) %>%
+  mutate(SteadyState=grepl("D.0",SampleNames),
+    DilutionRate=ifelse(grepl("D.0",SampleNames),
+      sub(".*D\\.(0.\\d+)$","\\1",SampleNames),NA),
+    PulseMinutes=ifelse(grepl("min$",SampleNames),
+      sub(".*t\\.(\\d+)\\.min","\\1",SampleNames),NA),
+    PulseSeconds=ifelse(grepl("seconds$",SampleNames),
+      sub(".*t\\.(\\d+)\\.seconds","\\1",SampleNames),NA),
+    Experiment="",Timescale=NA
+  ) %>%
+  mutate(Timescale=ifelse(grepl("(seconds$)|(Batch)",SampleNames),
+    "Short-term","Long-term")) %>%
+  mutate(Experiment=ifelse(grepl("400uM\\.G",SampleNames),
+    "400uM pulse\nglutamine, ",Experiment)) %>%
+  mutate(Experiment=ifelse(grepl("40uM\\.G",SampleNames),
+    "40uM pulse\nglutamine, ",Experiment)) %>%
+  mutate(Experiment=ifelse(grepl("^Batch.*min$",SampleNames),
+    str_c(Experiment,"batch"),str_c(Experiment,"chemostat"))) %>%
+  mutate(PulseMinutes=ifelse(grepl("seconds$",SampleNames),
+      sub(".*t\\.(\\d+)\\.seconds$","\\1",SampleNames),PulseMinutes)) %>%
+  mutate(PulseSeconds=ifelse(grepl("min$",SampleNames)
+      ,as.numeric(sub(".*t\\.(\\d+)\\.min$","\\1",SampleNames))*60
+      ,PulseSeconds)) %>%
+  mutate(PulseMinutes=as.numeric(PulseMinutes),
+    DilutionRate=as.numeric(DilutionRate)) %>%
+  mutate(PulseMinutes=ifelse(grepl("seconds$",SampleNames),
+      signif(PulseMinutes/60,3),PulseMinutes)) %>%
+  arrange(PulseMinutes)
+
+```
+
+
+```{r,savePlotObj}
+write_lines("#
+# Supplementary Table
+#
+# Results of principal components analysis (using the pcaMethods 
+# package) of Airoldi et al 2016 microarray data of steady-state 
+# and dynamic increases in nitrogen-limited growth.
+#
+# Key:
+# Name of sample , PC1 , PC2 , PC3 , PC4 , PC5 , PC6 , PC7 , PC8 , PC9 , PC10 , PC11 , PC12 , PC13 , PC14 , PC15 , is this sample at steady-state growth? , if chemostat, what is the dilution rate? , minutes after nitrogen addition , seconds after nitrogen addition , name of experiment for plotting , timescale of experiment" 
+ ,path="../output/Figure1_Table_PCAresults.csv") 
+plotobj %>% 
+  write_csv(path="../output/Figure1_Table_PCAresults.csv",append=T)
+```
+
+Percent of variance explained ....
+
+```{r}
+sqsbPca@R2
+```
+
+```{r,plot,cache=F}
+
+gss <- plotobj%>%unite(Experiment,Experiment,Timescale,sep="")%>%
+  ggplot()+
+  aes(col=DilutionRate)+
+  theme_classic()+
+  geom_point(data=plotobj%>%filter(SteadyState),size=2)+
+  scale_color_gradient("Steady-state\ngrowth rate",
+    low="#91bfdb",high="#fc8d59")+
+  theme(legend.position="bottom",legend.key.size=unit(.5,"cm"))+
+  guides(linetype=guide_legend(ncol=1))+
+  scale_linetype_discrete("Upshift time-series"
+    ,labels=c(`400uM pulse\nglutamine, batch`="batch"
+      ,`40uM pulse\nglutamine, chemostat`="chemostat"
+      )
+    )
+gss_pc12 <- gss+aes(x=PC1,y=PC2)+
+  xlab(str_c("PC1\n",signif(sqsbPca@R2[1]*100,3),"% variance"))+
+  ylab(str_c("PC2\n",signif(sqsbPca@R2[2]*100,3),"% variance"))+
+  coord_cartesian(xlim=range(plotobj$PC1),ylim=range(plotobj$PC2))
+gss_pc12
+
+gall <- gss +
+  geom_point(data=plotobj%>%filter(!SteadyState),size=2)+
+  geom_text_repel(data=plotobj%>%filter(!SteadyState),
+    box.padding=unit(0.5,"lines"),
+    color="black",aes(label=paste(PulseSeconds,"s")))+
+  geom_path(data=plotobj%>%filter(!SteadyState),
+    aes(group=factor(Experiment):factor(Timescale),linetype=Experiment))
+gall_pc12 <- gall+aes(x=PC1,y=PC2)+
+  xlab(str_c("PC1\n",signif(sqsbPca@R2[1]*100,3),"% variance"))+
+  ylab(str_c("PC2\n",signif(sqsbPca@R2[2]*100,3),"% variance"))+
+  coord_cartesian(xlim=range(plotobj$PC1),ylim=range(plotobj$PC2))
+gall_pc12
+
+gtwo <- gss +
+  geom_point(data=plotobj%>%filter(Timescale=="Short-term"),size=2)+
+  geom_text_repel(data=plotobj%>%
+    filter(!SteadyState,Timescale=="Short-term"),
+    box.padding=unit(0.5,"lines"),
+    color="black",aes(label=paste(PulseSeconds,"s"))
+    )+
+  geom_path(data=plotobj%>%
+      filter(!SteadyState,Timescale=="Short-term")
+    ,aes(group=factor(Experiment):factor(Timescale),linetype=Experiment))
+gtwo_pc12 <- gtwo+aes(x=PC1,y=PC2)+
+  xlab(str_c("PC1\n",signif(sqsbPca@R2[1]*100,3),"% variance"))+
+  ylab(str_c("PC2\n",signif(sqsbPca@R2[2]*100,3),"% variance"))+
+  coord_cartesian(xlim=range(plotobj$PC1),ylim=range(plotobj$PC2))
+gtwo_pc12
+```
+
+What about higher PCs?
+
+```{r,plotScores}
+pcVsVariance <- data.frame(PC=names(sqsbPca@R2),FractionVariance=sqsbPca@R2)%>%
+  mutate(PC=factor(PC,levels=PC))%>%
+  ggplot()+aes(x=PC,y=FractionVariance)+geom_point()+
+  theme_bw()+
+  theme(axis.text.x=element_text(angle=90))+
+  xlab("")
+
+g34 <- gss +
+  geom_point(data=plotobj%>%filter(Timescale=="Short-term"),size=2)+
+  geom_text_repel(data=plotobj%>%
+    filter(!SteadyState,Timescale=="Short-term"),
+    box.padding=unit(0.5,"lines"),
+    color="black",aes(label=paste(PulseSeconds,"s"))
+    )+
+  geom_path(data=plotobj%>%
+      filter(!SteadyState,Timescale=="Short-term")
+    ,aes(group=factor(Experiment):factor(Timescale),linetype=Experiment))+
+  aes(x=PC3,y=PC4)+
+  xlab(str_c("PC3\n",signif(sqsbPca@R2[3]*100,3),"% variance"))+
+  ylab(str_c("PC4\n",signif(sqsbPca@R2[4]*100,3),"% variance"))+
+  coord_cartesian(xlim=range(plotobj$PC3),ylim=range(plotobj$PC4))+
+  theme(legend.position="right")
+
+gHigher <- cowplot::plot_grid(pcVsVariance,g34,rel_widths=c(.4,.6),labels=c("A","B"))
+ggsave("../output/Figure1_S_higherComponents.un.tiff",gHigher,width=7,height=5)
+
+```
+
+Next, we look for genes that correlate well with PC1 and PC2.
+
+```{r,cor,cache=T}
+pc1corz <- cor(scores(sqsbPca)[,1],t(smallQandSSandBatch))
+pc2corz <- cor(scores(sqsbPca)[,2],t(smallQandSSandBatch))
+
+hist(pc1corz)
+hist(pc2corz)
+```
+
+And save everything.
+
+```{r,outz}
+save(plotobj,sqsbPca,pc1corz,pc2corz,file="../tmp/airoldiPCAanalysis.RData")
+```
+
+# Making the GO term tables.
+
+```{r,clusterProfilerSetup,cache=T}
+library(clusterProfiler)
+library(org.Sc.sgd.db)
+read_tsv("../data/sgd_go_slim_171013.txt",col_names=F                 
+  ,comment="!") -> SGDGOSlim                                          
+read_tsv("../data/sgd_go_terms_171013.txt",col_names=F                
+  ,comment="!") %>%                                                   
+  mutate(GOID=str_c("GO:"                                             
+    ,str_pad(string=X1,width=7,side="left",pad="0"))                  
+    ) -> SGDGOTerms 
+
+pc1vector <- setNames(pc1corz[1,]
+  ,nm=unlist(map(colnames(pc1corz),sysToSGD))
+  )
+pc2vector <- setNames(pc2corz[1,]
+  ,nm=unlist(map(colnames(pc2corz),sysToSGD))
+  )
+
+nPermutations <- 1e6
+GSEAResults <- list()
+```
+
+```{r,highPC1,dependson="clusterProfilerSetup",cache=T}
+system.time(
+GSEAResults[["PC1"]] <- GSEA(
+  gene=sort(pc1vector,decreasing=T)
+  ,TERM2GENE=SGDGOSlim%>%dplyr::select(X6,X3)
+  ,TERM2NAME=SGDGOTerms%>%dplyr::select(GOID,X2)
+  ,minGSSize=10,maxGSSize=500
+  ,pAdjustMethod="fdr"
+  ,pvalueCutoff=0.05,seed=171013
+  ,nPerm=nPermutations
+  )@result %>% mutate(PC="PC1")
+)
+```
+
+```{r,highPC2,dependson="clusterProfilerSetup",cache=T}
+system.time(
+GSEAResults[["PC2"]] <- GSEA(
+  gene=sort(pc2vector,decreasing=T)
+  ,TERM2GENE=SGDGOSlim%>%dplyr::select(X6,X3)
+  ,TERM2NAME=SGDGOTerms%>%dplyr::select(GOID,X2)
+  ,minGSSize=10,maxGSSize=500
+  ,pAdjustMethod="fdr"
+  ,pvalueCutoff=0.05,seed=171013
+  ,nPerm=nPermutations
+  )@result %>% mutate(PC="PC2")
+)
+```
+
+```{r,printOut,cache=T}
+
+gseGOtable <- bind_rows(GSEAResults) %>% as_tibble %>% 
+  dplyr::select(PC,ID,Description,enrichmentScore,p.adjust
+    ,setSize,rank) %>%
+  arrange(PC,-enrichmentScore)
+
+write_lines("#
+# Supplementary Table
+#
+# Results of gene set enrichment analysis of gene list ordered by 
+# correlation to principal components 1 or 2 of the PCA of 
+# Airoldi et al 2016 microarray data of steady-state and dynamic 
+# increases in nitrogen-limited growth.
+#
+# Key:
+# Principal component , GO term ID , GO term , enrichment score , adjusted p-value , size of GO term set , rank of this set in gene list"
+  ,path="../output/Figure1_Table_GSEofGOtermsAgainstPCcorrelation.csv") 
+gseGOtable %>% 
+  write_csv(path="../output/Figure1_Table_GSEofGOtermsAgainstPCcorrelation.csv",append=T)
+
+z <- gseGOtable %>% group_by(PC,enrichmentScore>0) %>%
+  summarize(AllDescriptions=list(Description))  %>%
+  spread(PC,AllDescriptions) %>%
+  rowwise() %>%
+  mutate(
+    diffPC1=list(setdiff(unlist(PC1),intersect(unlist(PC1),unlist(PC2))))
+    ,diffPC2=list(setdiff(unlist(PC2),intersect(unlist(PC1),unlist(PC2))))
+    ,samePC1=list(intersect(unlist(PC1),unlist(PC2)))
+    ,samePC2=list(intersect(unlist(PC1),unlist(PC2)))
+    ) 
+z
+```
+
+First, the ones that are shared between components. Remember, row 2 is
+increased, 1 is decreased.
+
+```{r,print2,cache=T}
+z[2,]%>%pull(samePC1)
+z[2,]%>%pull(samePC2)
+z[1,]%>%pull(samePC1)
+z[1,]%>%pull(samePC2)
+```
+
+Then, the ones that are distinct.
+Remember, row 2 is increased, 1 is decreased.
+
+```{r,print3,cache=T}
+z[2,]%>%pull(diffPC1)
+z[1,]%>%pull(diffPC1)
+
+z[2,]%>%pull(diffPC2)
+z[1,]%>%pull(diffPC2)
+```
+
+```{r}
+sessionInfo()
+```
+

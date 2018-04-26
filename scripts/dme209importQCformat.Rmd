@@ -1,0 +1,1100 @@
+---
+title: "importing, QCing, and exporting the barcode sequencing data
+from dme209"
+author: "Darach"
+date: "`r Sys.Date()`"
+---
+
+# importing
+
+First, libraries and files.
+
+```{r,message=F}
+library(tidyverse)
+library(stringr)
+library(pcaMethods)
+library(ggrepel)
+load("../tmp/NameIDList.RData")
+nislowRevisionTable <- read_tsv(
+  "../data/dme209/strainBarcodesNislowRevision.txt"
+  ,col_names=F
+  )
+```
+
+Then we readin the sample sheet.
+
+```{r,readsampleSheet,cache=T}
+sampleSheet <- read_csv("../data/dme209/dme209.SampleSheet.csv",
+    col_types=cols(SampleIndex="c")) %>%
+  unite("name",BiologicalReplicate,FACSGate,remove=F) %>% 
+  mutate(Shifted=ifelse(SamplingTime>5,"Shifted","PreShift")) 
+```
+
+Here, the gate settings and the events per gate. This is in
+arbitrary units of APC.A linearly scaled to be above zero,
+by the way.
+
+```{r,readgates}
+load("../tmp/dme209FACSgatez.RData")
+
+gates <- gatez %>% 
+  unite("name",BiologicalReplicate,FACSGate,remove=T) %>%
+  select(-Shifted)
+
+write_lines("#
+# Supplementary Table
+#
+# Table of BFF FACS-run gates and events observed in each gate. 
+# Note that there are some gaps between gates, this is because they
+# were drawn with a GUI by the sorting technician.
+#
+# Key:
+# Biological replicate , gate ID , lower bound of APC.A signal for that gate , upper bound of APC.A signal for that gate , events observed going into that gate during FACS run used for sequencing , the mean APC.A signal of events in that bin observed using 10000 events per sample in a flow cytometry run used to determine the gate boundaries"
+  ,path="../output/Figure4_Table_BFFcountsAndGateSettingsFACS.csv")
+gates%>%separate(name,c("Biological Replicate","Gate ID"))%>%
+  write_csv(path="../output/Figure4_Table_BFFcountsAndGateSettingsFACS.csv"
+    ,append=T)
+
+```
+
+Then we join these all together...
+
+```{r,collapseTogether,cache=T}
+fullSampleSheet <- full_join(sampleSheet,gates,by=c("name"))
+
+fullSampleSheet <- full_join(fullSampleSheet,
+    read_tsv("../data/dme209/sampleBarcodesRobinson2014.txt",
+      col_names=c("SampleIndex","SampleBarcode"))%>%
+      mutate(SampleIndex=str_replace(SampleIndex,"Sample","")),
+  by=c("SampleIndex"))
+```
+
+Here we read in a list of strains that should be in there... QC!
+
+```{r,strainList,cache=T,warning=F}
+strainList <- read_csv("../data/dme209/listOfPrototrophDeletionStrains.csv",col_names=T) 
+expectedStrains <- strainList$strain[!strainList$strain%in%c("blank","wild-type")]
+```
+
+I've repressed the warnings because it doesn't like that some columns
+are repeated.
+
+Then we read the data in.
+
+# HEY
+
+You need the counts of strain for each sample barcode.
+This is from the dme209 quantification pipeline, which is run
+by the `dme209stoker.sh` script. 
+You need to copy those files from the `tmp/dme209` directory to the
+`data/dme209` directory! I could do this automatically, but 
+I didn't. I figure these intermediate files oughta be archived in
+data!
+
+There's a couple ways to go about this. 
+
+We first tried doing a canonical pipeline with `umi_tools`, then
+`uniq -c`, then read that in. That code is here, but it's not
+echoing for the HTML. Check out the raw if you care.
+
+```{r,readdatar,cache=T,eval=F,echo=F}
+datar <- tibble(Filename=
+    list.files(path="../data/dme209",
+      pattern="*counted",full.names=T))%>%
+  group_by(Filename)%>%
+  mutate(SampleBarcode=str_replace_all(
+    str_extract(Filename,"[ATCG]{5}"),
+    "\\.","") )%>%
+  mutate(Deduped=ifelse(grepl("dedup",Filename),T,F))%>%
+  mutate(RawInput=list(read_lines(Filename)))%>%
+  unnest()%>%ungroup()%>%
+  mutate(RawInput=str_trim(RawInput))%>%
+  separate(RawInput,c("Counts","Strain"),sep="\\s+")%>%
+  mutate(Counts=as.numeric(as.character(Counts))) %>%
+  mutate(Common=renameSystematicToCommon[Strain]) %>% 
+  ungroup()
+datar
+```
+
+Once I realized that the UMIs were becoming saturated,
+we did it another way (below).
+
+Here, we pull the strain identifier and UMI directly
+from the sam/bam files, and that's what we've done here.
+We're going to call these strain ID, UMI combo files the "pulled"
+files for short.
+I'm using those "pulled" files so I can see how many of each UMI
+I have.
+
+First, I take the un-deduplicated so we can look at these a bit.
+This barely fits in RAM, so clear it up, make sure you've got
+swap space, and hold on.
+
+```{r,parsePulledDataInNonDeduped,cache=T,eval=T,warning=F,message=F}
+gc()
+warning(system("ulimit -s"))
+#
+parsePulled <- function(filename){
+# This is a little hack to get feedback
+  warning(system(str_c("echo 'Reading ",filename," '")))
+  read_csv(filename,col_names=c("Strain","UMI"))%>%
+    mutate(ContainsN=str_count("N",UMI)>0) %>%
+    group_by(Strain,UMI,ContainsN)%>%
+    summarize(Obs=length(UMI)) %>%
+    ungroup()
+  }
+dataToRead <- tibble(Filename=
+  list.files(path="../data/dme209",
+      pattern=".*bwa.sam.pulled",full.names=T))%>%
+  group_by(Filename)%>%
+  mutate(SampleBarcode=str_replace_all(
+    str_extract(Filename,"[ATCG]{5}"),
+    "\\.","") )%>%
+  mutate(Deduped=ifelse(grepl("dedup",Filename),T,F)) 
+pulleddatar <- dataToRead %>%
+  mutate(Filez=map(Filename,parsePulled))%>% ungroup() %>% 
+  select(-Filename) 
+#
+gc()
+```
+
+```{r,aggregateSomeUMIstats,cache=T,dependson="parsePulledDataInNonDeduped"}
+someFunction <- function(x) {
+  z <- x %>% group_by(Strain,ContainsN) %>% 
+    mutate(TotalObs=sum(Obs,na.rm=T)
+      ,UniqueObs=length(unique(UMI))
+      ,RelativeObs=Obs-TotalObs/4096
+      ) %>% 
+    select(-Obs) %>% ungroup() 
+  list(
+    PerStrain=(
+      z %>% group_by(Strain,ContainsN) %>% 
+        select(Strain,TotalObs,UniqueObs) %>%
+        distinct()
+      )
+    ,PerUMI=(
+      z %>% group_by(UMI) %>% nest(.key="PerUMI",RelativeObs) %>% 
+        distinct()
+      )
+    )
+}
+umiStatz <- pulleddatar %>% 
+  group_by(SampleBarcode) %>%
+  transmute(Statz=map(Filez,someFunction)) %>%
+  transmute(PerUMI=Statz[[1]]["PerUMI"]
+    ,PerStrain=Statz[[1]]["PerStrain"]) %>% ungroup()
+```
+
+Okay. Are all UMI's used? Is there bias towards some representation?
+
+```{r,cachePulledDatar,cache=T,dependson="parsePulledDataInNonDeduped"}
+save(pulleddatar,file="../tmp/dme209_temporary_pulleddatar.RData")
+  rm(pulleddatar) # for RAM
+
+```
+
+```{r,someStatz,cache=T,dependson="cachePulledDatar"}
+gc()
+
+acrossAll <- umiStatz %>% select(SampleBarcode,PerUMI) %>% 
+  unnest() %>% unnest() 
+
+g <- acrossAll %>% group_by(SampleBarcode) %>% count(UMI) %>%
+  filter(str_count(UMI,"N")==0) %>% 
+  mutate(nGC=str_count(UMI,"[GC]"))  %>% 
+  ggplot()+
+  aes(x=nGC,group=nGC,y=n)+geom_boxplot()+
+  scale_y_log10()
+g
+
+g <- acrossAll %>% group_by(SampleBarcode) %>% count(UMI) %>%
+  filter(str_count(UMI,"N")==0) %>% 
+  group_by(UMI)%>%
+  summarize(Median=median(n,na.rm=T))%>%
+  mutate(nGC=str_count(UMI,"[GC]")) %>% 
+  ggplot()+
+  aes(x=nGC,group=nGC,y=Median)+geom_boxplot()+
+  scale_y_log10()
+g
+
+g <- acrossAll %>% group_by(SampleBarcode) %>% count(UMI) %>%
+  filter(str_count(UMI,"N")==0) %>% 
+  group_by(UMI)%>%
+  summarize(Median=median(n,na.rm=T))%>%
+  ggplot()+
+  aes(x=Median)+geom_histogram(bins=100)+scale_x_log10()
+g
+
+acrossAllstats <- acrossAll %>% select(-SampleBarcode) %>% 
+  group_by(UMI) %>% 
+  summarize(Median=median(RelativeObs,na.rm=T)) %>%
+  group_by(UMI) %>% 
+  mutate(nN=str_count(UMI,"N")) %>% 
+  mutate(nGC=str_count(UMI,"[GC]")) 
+
+acrossAllstats$UMI %>% str_split("") %>% unlist %>% table()
+
+ggplot(acrossAllstats)+aes(x=Median)+geom_histogram(bins=100)+scale_x_log10()
+
+ggplot(acrossAllstats)+aes(x=nN,group=nN,y=Median)+geom_boxplot()+scale_y_log10()
+
+acrossAllstats %>% filter(nN==0) %>% ggplot()+
+  aes(x=nGC,group=nGC,y=Median)+geom_boxplot()
+
+acrossAllstats %>% filter(nN==0) %>% ggplot()+
+  aes(x=nGC,group=nGC,y=Median)+geom_boxplot()+
+  scale_y_continuous(limits=c(0.88,1))
+
+acrossAllstats %>% filter(nN==0) %>% group_by(nGC) %>%
+  summarize(z=list(summary(Median))) %>% pull(z)
+
+acrossAll %>% group_by(SampleBarcode) %>% count(UMI) %>%
+  filter(str_count(UMI,"N")==0) %>% 
+  mutate(nGC=str_count(UMI,"[GC]")) %>% 
+  group_by(nGC) %>% 
+  summarize(z=list(summary(n))) %>% pull(z)
+```
+
+I think I see a slight slight GC effect in the UMIs. It looks like
+a smile, but when I compare it the medians of the relative counts
+within each strain within each sample barcode, across UMIs, it looks
+like it's a difference of 0.9023 to 0.9006 to 0.9052. 
+So... that's really subtle. When I look in the counts, I think
+I see it to. 
+
+But this is a tiny effect. Since I don't have any way to use this
+info, I'm just going to continue with assumption that all UMIs
+are hit equally likely. Really, there's not huge trends here,
+and adjusting for this might be not doable.
+
+Okay, so in the raw UMI counts, let's look at how often we observe
+how many counts per UMI.
+
+```{r,plotPulledDataNonDeduped,cache=T,eval=T,dependson="cachePulledDatar"}
+try(rm(acrossAll))
+try(rm(acrossAllstats))
+gc()
+
+acrossStrain <- umiStatz %>% select(SampleBarcode,PerStrain) %>% 
+  unnest() 
+
+labelSaturation <- function(x) {
+  4096*(1-exp(-x/4096))
+}
+g <- acrossStrain %>%
+  ggplot()+aes(y=UniqueObs,x=TotalObs)+
+  theme_classic()+stat_function(fun=labelSaturation)+
+  ylab("Unique UMIs per strain, per sample")+
+  xlab("Raw read counts per strain, per sample")+
+  geom_point(alpha=0.5)
+g
+```
+
+```{r}
+ggsave("../output/Figure4_S_umiSaturationCurve.un.tiff",g,width=4,height=4)
+```
+
+So this is telling us that it's plateauing, as expected, that with
+so many total observations going in it is hitting 4096. 
+However, that line is the expected saturation curve if we were 
+randomly sampling labels. This tells us that it's increasing more
+slowly, and I think that's because of PCR noise, so essentially
+that the Total Observed Reads are inflated.
+
+We can flip the expected saturation function (which I got from
+thinking about it but then looking up Fu et al 2011, so call it
+theirs) around, and we can turn:
+
+$$ \text{Unique labels} = 4096*(1-e^{-\frac{\text{original input}}{4096}}) $$
+
+into 
+
+$$ \text{Original input} = -4096*\log{1-\frac{\text{original input}}{4096}} $$
+
+Next, we do the same with the deduplicated UMIs, see if `umi_tools`
+did anything for us.
+
+First, we 
+
+```{r,parsePulledDataInDeduped,cache=T,eval=T,warning=F,message=F}
+try(rm(acrossAll))
+try(rm(acrossAllstats))
+try(rm(umiStatz))
+gc()
+parsePulled <- function(filename){
+  read_csv(filename,col_names=c("Strain","UMI"))%>%
+    mutate(ContainsN=str_count("N",UMI)>0) %>%
+    group_by(Strain,ContainsN)%>%
+    summarize(DedupedUniqueUMIs=length(UMI)) %>%
+    ungroup()
+}
+pulleddatarDeduped <- tibble(Filename=
+    list.files(path="../data/dme209",
+      pattern=".*bwa.dedup.bam.pulled",full.names=T))%>%
+  group_by(Filename)%>%
+  mutate(SampleBarcode=str_replace_all(
+    str_extract(Filename,"[ATCG]{5}"),
+    "\\.","") )%>%
+  mutate(Deduped=ifelse(grepl("dedup",Filename),T,F)) %>%
+  mutate(Filez=map(Filename,parsePulled))%>% ungroup() %>% 
+  select(-Filename) %>% unnest()
+gc()
+```
+
+```{r,tackOnUnDeduped,cache=T,eval=T}
+pulleddatarDeduped <- pulleddatarDeduped %>% 
+  left_join(acrossStrain
+    ,by=c("Strain","SampleBarcode","ContainsN")
+    )
+```
+
+Now we want to plot how the number of UMI-deduped counts scale
+with the measured inputs from the non-deduped, or by the stochastic
+labeling saturation correction.
+
+```{r,plotPulledData,cache=T,eval=T}
+labelSaturation <- function(x) {
+  4096*(1-exp(-x/4096))
+}
+pulleddatarDeduped %>%
+  ggplot()+aes(x=TotalObs,y=DedupedUniqueUMIs)+
+  theme_classic()+stat_function(fun=labelSaturation)+
+  geom_point(alpha=0.5)+
+  scale_y_continuous(limits=c(0,700))
+
+g <- pulleddatarDeduped %>%
+  ggplot()+aes(x=TotalObs,y=DedupedUniqueUMIs)+
+  theme_classic()+
+  geom_point(alpha=0.2,size=0.1)+
+  stat_function(fun=labelSaturation,col="black")+
+  scale_y_continuous(limits=c(0,700))+
+  ylab("Unique UMIs per strain, per sample")+
+  xlab("Raw read counts per strain, per sample")
+g
+```
+
+```{r}
+ggsave("../output/Figure4_S_totalInputReadsVsUMItoolsCounts.pdf"
+  ,g,width=5,height=5)
+
+```
+
+Well look at that. It looks like there's a bit of a curve early on,
+but after a few hundred input reads it starts falling off real fast.
+So I think this is grossly underestimating UMIs, since it's not
+designed to perform in this regime.
+
+So what I'm going to do, is I'm going to 
+turn the number of unique labels observed into estimated counts,
+by applying the correction to estimate input reads based
+on label sampling:
+
+$$ \text{Original input} = -4096*\log{1-\frac{\text{original input}}{4096}} $$
+
+We call this the `EstInput` and the total of input reads is
+`RawCounts`.
+
+```{r,reloadUMIstats,cache=T,dependson="parsePulledDataInNonDeduped",dependson="cachePulledDatar"}
+message(gc())
+try(rm(pulleddatarDeduped))
+try(rm(acrossStrain))
+try(rm(acrossAll))
+try(rm(acrossAllstats))
+try(rm(umiStatz))
+try(rm(g))
+try(rm(pulleddatar))
+message(gc())
+load(file="../tmp/dme209_temporary_pulleddatar.RData")
+pulleddatar <- pulleddatar
+```
+
+```{r,labelingCollisionCorrection,cache=T}
+
+tabulateTheDatar <- function(x){
+  x %>% filter(!ContainsN) %>%
+    group_by(Strain) %>% 
+    summarize(RawCounts=sum(Obs)
+      ,UniqueUMI=length(unique(UMI))
+      )
+}
+datar <- pulleddatar %>% group_by(SampleBarcode) %>%
+  transmute(z=map(Filez,tabulateTheDatar)) %>%
+  unnest() %>% 
+  mutate(EstInput=-4096*log(1-(UniqueUMI/4096))) %>% 
+  mutate(Common=renameSystematicToCommon[Strain])
+```
+
+Put that together into a big tibble. That's weird to say.
+( welcome to 2017 ).
+
+```{r,bigdfAndNewVars,cache=T}
+
+bigdatar <- full_join(fullSampleSheet,datar,by="SampleBarcode") %>% 
+  filter(!is.na(BiologicalReplicate)) %>%
+  filter(!is.na(Strain)) %>%
+  ungroup() %>%
+  mutate(PCRreplicate=factor(PCRreplicate)
+    ,BiologicalReplicate=factor(BiologicalReplicate)
+    ,FACSGate=factor(FACSGate)
+    ,IsExpected=Strain%in%expectedStrains
+    )
+```
+
+```{r,RawIshTable}
+write_lines("#
+# Supplementary Table
+#
+# Table of observed counts of barcodes in the sequencing data as
+# processed by our pipeline. I have associated variables with it
+# here to facilitated handling and modeling.
+#
+# Key:
+# Biological replicate , FACS gate (or unsorted input) , replicate of PCR-based library prep , pre-shift or post-shifted sample , systematic ID of knockout , common name of knockout , raw counts of observations , unique UMI observed for that strain in that sample , estimated input using UMI collision correction , lower bound of APC.A signal in that gate , upper bound of APC.A signal in that gate , events sorted into that gate/bin in total , mean APC.A signal in that bin in a flow cytometry measurement of 10000 events used to set gates"
+  ,path="../output/Figure4_Table_BFFinputData.csv")
+bigdatar %>% 
+  dplyr::select(BiologicalReplicate,FACSGate,PCRreplicate
+    ,Shifted,Strain,Common
+    ,RawCounts,UniqueUMI,EstInput
+    ,LowerBound,UpperBound,Events,MeanSignalInBin
+    ) %>%
+  write_csv(path="../output/Figure4_Table_BFFinputData.csv"
+    ,append=T)
+```
+
+```{r,bigdfAndNewVarsContinued,cache=T}
+bigdatar <- full_join(bigdatar
+  ,bigdatar %>% group_by(SampleBarcode) %>% 
+    summarize(TotalEstInput=sum(EstInput,na.rm=T)
+      ,TotalRawCounts=sum(RawCounts,na.rm=T)
+    )
+  ,by=c("SampleBarcode")
+  ) %>% ungroup() 
+
+bigdatar <- full_join(bigdatar
+  ,bigdatar %>% 
+    select(Events,FACSGate,BiologicalReplicate,Shifted) %>% 
+    filter(FACSGate!="input") %>% 
+    group_by(BiologicalReplicate,Shifted,FACSGate)%>%
+    distinct%>%#summarize_all(funs(unique))%>%
+    group_by(BiologicalReplicate,Shifted)%>%
+    summarize(TotalEvents=sum(Events))
+  ,by=c("BiologicalReplicate","Shifted")
+  )
+
+bigdatar
+
+head(data.frame(bigdatar))
+
+```
+
+# qc
+
+We want to use the measurements that aren't just noise. Also, I know
+replicate C had about half the events of A and B (I think it was
+due to a screw up on the collection tubes, but it was across both
+shifted and not upshifted, so I think it may have been that I
+messed both of those up in the hybridization or something).
+Also, not all PCRs always actually work.
+And not all counts are probably real (see the poisson noise thing
+later).
+
+So how do the total counts look?
+
+```{r,totals,cache=T}
+
+bigdatar%>%
+  select(SampleIndex,BiologicalReplicate,FACSGate,PCRreplicate
+    ,Shifted,QCPool,TotalEstInput,TotalRawCounts)%>%
+  distinct()%>%
+  gather(Variable,Value,TotalEstInput,TotalRawCounts)%>%
+  ggplot()+
+    aes(x=factor(QCPool):factor(BiologicalReplicate):
+               factor(Shifted):factor(FACSGate):factor(PCRreplicate)
+      ,y=Value
+      )+
+    theme_bw()+
+    facet_wrap(~Variable)+
+    theme(axis.text.x=element_text(angle=90))+
+    geom_text(aes(label=SampleIndex))+
+    scale_y_log10(breaks=c(10^c(1:5),seq(2,22,5)*1e5))
+
+bigdatar%>%
+  select(SampleIndex,BiologicalReplicate,FACSGate,PCRreplicate
+    ,Shifted,QCPool,TotalEstInput,TotalRawCounts)%>%
+  distinct()%>%
+  ggplot()+
+    aes(x=TotalRawCounts,y=TotalEstInput
+      ,col=factor(QCPool):factor(BiologicalReplicate):
+           factor(Shifted):factor(FACSGate):factor(PCRreplicate)
+      )+
+    theme_classic()+
+    guides(col=F)+
+    theme(axis.text.x=element_text(angle=90))+
+    geom_text(aes(label=SampleIndex))+
+    scale_y_log10(breaks=c(10,100,1e3,1e4,1e5,3e5,1.2e6,2.4e6,4.8e6,1e7))+
+    scale_x_log10(breaks=c(10,100,1e3,1e4,1e5,3e5,1.2e6,2.4e6,4.8e6,1e7))
+
+bigdatar%>%
+  select(SampleIndex,BiologicalReplicate,FACSGate,PCRreplicate
+    ,Shifted,QCPool,TotalEstInput,TotalRawCounts)%>%
+  distinct()%>%
+  filter(!(SampleIndex%in%c(85,37,49,73,109,1)))%>%
+  ggplot()+
+    aes(x=TotalRawCounts,y=TotalEstInput
+      ,col=factor(BiologicalReplicate):factor(FACSGate)
+      )+
+    theme_classic()+
+    theme(axis.text.x=element_text(angle=90))+
+    geom_text(aes(label=SampleIndex))+
+    scale_y_log10(breaks=c(3e5,4e5,5e5,6e5))+
+    scale_x_log10(breaks=c(5e5,7.5e5,1e6,1.25e6))
+
+sumFunc <- function(x) {
+  z <- summary(x)
+  return(c(ymin=z[[1]],lower=z[[2]],middle=z[[3]],upper=z[[5]],ymax=z[[6]]))
+}
+bigdatar%>%
+  unite(x_axis,QCPool,BiologicalReplicate,FACSGate,Shifted
+    ,PCRreplicate) %>%
+  mutate(EstFracUnique=EstInput/RawCounts)%>%
+  select(x_axis,EstFracUnique)%>%
+  arrange(x_axis)%>%
+  ggplot()+aes(x=x_axis,y=EstFracUnique)+theme_classic()+
+  xlab("Each sample")+
+  ylab("Fraction estimated unique after
+    stochastic labelling correction")+
+  stat_summary(fun.data=sumFunc,geom="boxplot")+
+  theme(axis.text.x=element_text(angle=90))
+#+ coord_cartesian(ylim=c(0,0.5))
+
+g <- bigdatar%>%
+  filter(SampleIndex!=1)%>%
+  group_by(Strain)%>%
+  ggplot()+aes(x=RawCounts,y=EstInput/RawCounts)+theme_bw()+
+  xlab("Each sample")+
+  ylab("Estimated input targets over raw counts")+
+  geom_point(alpha=0.2,size=0.5)+
+  theme(axis.text.x=element_text(angle=90))+
+#    coord_cartesian()+
+  ggtitle("Left is sorted samples, right is input libraries,
+    x-axis different, excluded SampleIndex 1")+
+  scale_y_continuous(breaks=seq(0,1,by=0.1))+
+  facet_grid(BiologicalReplicate~factor(FACSGate=="input")
+    ,scales="free")
+g
+
+```
+
+So there's two outliers here, samples 1 in particular. 
+
+Need to exclude 85,37,109,49,73 as those are probably the ones that
+I didn't add (primer addition mistake, because I was thinking
+about the french presidential elections and got distracted).
+
+
+```{r,firstfilter,cache=T}
+bigdatar <- bigdatar %>% filter(!(SampleIndex%in%c(1,85,37,109,49,73)))
+```
+
+How well do PCR replicates correlate for a sample?
+
+```{r,pcrreplicatesCV,cache=T}
+pcrcv <- bind_rows(
+  bigdatar%>%
+    select(BiologicalReplicate,Shifted,FACSGate,Strain,PCRreplicate
+      ,RawCounts)%>%
+    group_by(BiologicalReplicate,Shifted,FACSGate,Strain) %>% 
+    spread(PCRreplicate,RawCounts) %>% 
+    mutate(PCRsd=sd(c(`1`,`2`,`3`),na.rm=T)) %>%
+    mutate(PCRmean=mean(c(`1`,`2`,`3`),na.rm=T)) %>%
+    mutate(PCRcv=PCRsd/PCRmean,Type="RawCounts") 
+  ,bigdatar%>%
+    select(BiologicalReplicate,Shifted,FACSGate,Strain,PCRreplicate
+      ,EstInput)%>%
+    group_by(BiologicalReplicate,Shifted,FACSGate,Strain) %>% 
+    spread(PCRreplicate,EstInput) %>% 
+    mutate(PCRsd=sd(c(`1`,`2`,`3`),na.rm=T)) %>%
+    mutate(PCRmean=mean(c(`1`,`2`,`3`),na.rm=T)) %>%
+    mutate(PCRcv=PCRsd/PCRmean,Type="EstInput")
+  )
+```
+
+```{r,plotpcrCV,cache=T}
+pcrcv %>%
+  ggplot()+aes(x=PCRcv)+
+  geom_histogram(bins=050)+
+  facet_grid(BiologicalReplicate+Type~FACSGate)+
+  theme_classic()+
+#  coord_cartesian(ylim=c(0,3000))+
+  xlab("CV of PCR replicates\n( sd() / mean() )")+
+  ylab("Density")+
+  theme(axis.text.x=element_text(angle=90))
+
+pcrcv %>%
+  ggplot()+
+    aes(x=PCRmean,y=PCRsd)+geom_point(size=0.1)+
+    facet_grid(BiologicalReplicate+Type~FACSGate)+
+    theme_bw()+
+    scale_x_log10()+scale_y_log10()+
+#    coord_cartesian(ylim=c(0,3000))+
+    xlab("PCR mean")+
+    ylab("PCR standard deviation")+
+    theme(axis.text.x=element_text(angle=90))
+
+```
+
+You can see that in the input we see multiple detection of most
+things, but with some more variation coming up in B.
+C is the weird one, again likely because it's lower input.
+Inputs look good, sorted look worse, B looks best.
+
+```{r,densities,cache=T,fig.width=10,fig.height=10}
+g <- bigdatar %>% 
+  select(BiologicalReplicate,IsExpected,FACSGate,Shifted
+    ,RawCounts,EstInput,PCRreplicate,Strain
+    )%>%
+  gather(Variable,Value,EstInput,RawCounts) %>%
+  arrange(Variable,Strain)%>%
+  ggplot()+aes(x=Value,col=PCRreplicate)+
+  facet_grid(BiologicalReplicate+IsExpected+Variable~FACSGate+Shifted,
+    scales="free_y")+
+  scale_x_log10()+#ylim(0,1.5)+
+  theme(legend.position="bottom",axis.text.x=element_text(angle=90))
+g+stat_bin(bins=50,geom="line",position="identity",alpha=0.3)
+```
+
+We see that all of them have that characteristic noise
+coming in from the left, probably poisson distibuted just noise and
+false counts/reads. Looks like it's done by 5 counts.
+
+We see strains we don't expect, but after discussion we think that
+maybe some barcodes are incorrect. Wouldn't be the first time that
+happened. Look at YMR258C:
+
+>               YMR258C GATGTCCACGAGGTCTCT
+>    uptag priming site GATGTCCACGAGGTCTCT
+
+So that's revised as being the uptag priming site. Mistakes happen,
+especially when you have yeast being yeast and molecular biology
+being molecular biology.
+
+```{r,countsPerStrainNoiseband,cache=T}
+
+g <- bigdatar %>% 
+  select(BiologicalReplicate,IsExpected,FACSGate,Shifted
+    ,RawCounts,EstInput,PCRreplicate,Strain
+    )%>%
+  gather(Variable,Value,EstInput,RawCounts) %>%
+  arrange(Variable,Strain)%>%
+  ggplot()+aes(x=Value
+    ,group=PCRreplicate:factor(BiologicalReplicate):factor(FACSGate)
+    ,col=factor(BiologicalReplicate):factor(FACSGate)
+    )+
+  stat_bin(geom="line",aes(y=..count..),bins=100,position="identity")+
+  facet_grid(IsExpected~.,scales="free_y")+
+  scale_x_log10(breaks=c(0,1,10,20,30,50,70,100,1e3,1e4))+
+  geom_vline(xintercept=5,linetype="dashed")+
+  geom_vline(xintercept=10,linetype="dashed")+
+  geom_vline(xintercept=15,linetype="dashed")+
+  geom_vline(xintercept=20,linetype="dashed")
+g
+
+```
+
+Let's see if we can't pick a threshold of pulling out noise that
+preserves the large patterns of variation in the data.
+We'll take a look at PCA of all samples, to see how that plays.
+Also, this is a nice peak to see how samples did, if we oughta
+exclude one or two to better answer our question.
+
+It might crap out on you here. If so, you need to open up whatever
+shell you're running this in, and do `ulimit -s 65546` to let it
+make C stacks of `r 65546*512` bytes. 
+Otherwise tidyr will fill it up and die.
+Also, the Makefile does this for you.
+
+
+```{r,makePCAplotDFz,cache=T,warning=F}
+
+doPCAtoPlotDF <- function(datartouse=bigdatar
+                          ,variableToUse="RawCounts",threshold=0) {
+  message(str_c("Thresholding ",variableToUse," on ",threshold," and doing PCA"))
+  pcadatar <- as.matrix( datartouse %>% 
+    rename(Signal=!!variableToUse) %>%
+    mutate(Signal=Signal-!!threshold) %>% filter(Signal>0)%>%
+    select(matches("SampleIndex"),matches("^Signal$")
+      ,matches("Strain")
+      ) %>%
+    spread(key=SampleIndex,value=Signal) %>%
+    select(matches("^\\d+$"))
+    )
+  pcAnalysis <- pca(object=t(pcadatar),method="svd",scale="none",center=T,nPcs=10)
+  plotdf <- scores(pcAnalysis)
+  plotdf <- inner_join(
+    as_tibble(data.frame(SampleIndex=rownames(plotdf),plotdf
+        ,stringsAsFactors=F))
+    ,fullSampleSheet
+    ,by="SampleIndex")
+  return(plotdf)
+}
+
+```
+
+Plotting the first three PCs.
+I think the first one is largely sample depth, but not sure.
+
+```{r,plotpcaRawCounts,cache=T}
+g <- doPCAtoPlotDF(bigdatar 
+    ,variableToUse="RawCounts"
+    ,threshold=0) %>%
+  ggplot()+theme_classic()+
+  aes(col=FACSGate,label=str_c(BiologicalReplicate,",",PCRreplicate))+
+  geom_point()+
+  theme(legend.position="bottom")+
+  guides(col=guide_legend(title="Sample",nrow = 4))+
+  scale_color_brewer(palette="Set1")+
+  facet_grid(Shifted~.)+geom_text_repel(size=3)+
+  geom_line(color="black",linetype="dashed",
+    aes(group=factor(BiologicalReplicate):factor(FACSGate)))
+g+aes(x=PC1,y=PC2)
+g+aes(x=PC3,y=PC4)
+
+g3 <- g%+%doPCAtoPlotDF(bigdatar 
+    ,variableToUse="RawCounts"
+    ,threshold=3)
+g3+aes(x=PC1,y=PC2)
+g3+aes(x=PC3,y=PC4)
+
+g5 <- g%+%doPCAtoPlotDF(bigdatar
+    ,variableToUse="RawCounts"
+    ,threshold=5)
+g5+aes(x=PC1,y=PC2)
+g5+aes(x=PC3,y=PC4)
+
+g7 <- g%+%doPCAtoPlotDF(bigdatar
+    ,variableToUse="RawCounts"
+    ,threshold=7)
+g7+aes(x=PC1,y=PC2)
+g7+aes(x=PC3,y=PC4)
+
+g10 <- g%+%doPCAtoPlotDF(bigdatar 
+    ,variableToUse="RawCounts"
+    ,threshold=10)
+g10+aes(x=PC1,y=PC2)
+g10+aes(x=PC3,y=PC4)
+```
+
+```{r,plotpcaEstInput,cache=T}
+g <- doPCAtoPlotDF(bigdatar 
+    ,variableToUse="EstInput"
+    ,threshold=0) %>%
+  ggplot()+theme_classic()+
+  aes(col=FACSGate,label=str_c(BiologicalReplicate,",",PCRreplicate))+
+  geom_point()+
+  theme(legend.position="bottom")+
+  guides(col=guide_legend(title="Sample",nrow = 4))+
+  scale_color_brewer(palette="Set1")+
+  facet_grid(Shifted~.)+geom_text_repel(size=3)+
+  geom_line(color="black",linetype="dashed",
+    aes(group=factor(BiologicalReplicate):factor(FACSGate)))
+g+aes(x=PC1,y=PC2)
+g+aes(x=PC3,y=PC4)
+
+g3 <- g%+%doPCAtoPlotDF(bigdatar 
+    ,variableToUse="EstInput"
+    ,threshold=3)
+g3+aes(x=PC1,y=PC2)
+g3+aes(x=PC3,y=PC4)
+
+g5 <- g%+%doPCAtoPlotDF(bigdatar
+    ,variableToUse="EstInput"
+    ,threshold=5)
+g5+aes(x=PC1,y=PC2)
+g5+aes(x=PC3,y=PC4)
+
+g7 <- g%+%doPCAtoPlotDF(bigdatar
+    ,variableToUse="EstInput"
+    ,threshold=7)
+g7+aes(x=PC1,y=PC2)
+g7+aes(x=PC3,y=PC4)
+
+g10 <- g%+%doPCAtoPlotDF(bigdatar 
+    ,variableToUse="EstInput"
+    ,threshold=10)
+g10+aes(x=PC1,y=PC2)
+g10+aes(x=PC3,y=PC4)
+```
+
+Huh. So you see how the rep C p4 samples overlap the p5 samples
+in the no-threshold and threshold on 3 samples, but not on 5 or 
+above? I think that's the low counts noise driving them out there.
+So I think I oughta threshold on 5 counts or more.
+
+Note that A p3 looks odd a bit. That was the only reaction that
+had fainter bands in the PCR, for all reps.
+I think I should just exclude those, as I think they had bad genomic
+DNA inputs.
+However, it should affect all strains equally. So it might reduce
+the quality of the fits, but shouldn't bias us one way or another
+unless it's just a really noisy fit. I'm fortunate that it's not
+in the highest GAP1 bin.
+
+```{r,filterCounts,cache=T}
+fbigdatar <- bigdatar %>% 
+  mutate(RawCounts=RawCounts-5) %>%
+  mutate(EstInput=EstInput-5) %>%
+  filter(RawCounts>0,EstInput>0) %>% ungroup()
+```
+
+Given that threshold,
+how many strains do we then detect in each sample?
+
+```{r,plotStrainsPerSample,cache=T}
+fbigdatar %>% 
+  ggplot(aes(x=PCRreplicate))+theme_classic()+
+    geom_bar()+
+    stat_count(geom="text",aes(label=..count..),angle=90,size=3)+
+    scale_y_continuous(limits=c(0,5000))+
+    facet_grid(BiologicalReplicate~FACSGate+Shifted,scales="free")+
+    theme(axis.text.x=element_text(angle=90))+
+    scale_color_discrete("Detected strain?")
+```
+
+Here we exclude samples that look really odd, or shouldn't be
+in the data (and largely aren't, but just for completeness ).
+
+We will leave in the C replicate. Now, I don't trust it as much
+because it had lower inputs into the PCR and it looks a lot noisier,
+but it is a replicate. I'll leave it in.
+It's an example of the method with half the inputs (because of that
+sorting stream-alignment screw up that lost half the samples).
+
+I don't like replicate A, p3. It looks weird on the PCA, and looking
+back in my notebook Ap3 was consistently light in the gel. I think
+that extraction went bad. However, it looks like a sampling depth
+issue, in that it does look like the major axis of variation is the
+same as between input samples, and it falls in just about the right
+place in PC3 and PC4. I'll keep those two.
+
+I'm going to nix p6 C1 though, it looks really odd.
+
+And I'm making sure that anything from the ones I screwed up with
+the index mix-up (A rep 3 p2,3,4,5,6 ) are excluded. Damn french
+election worries.
+
+```{r,filterSamples,cache=T}
+dat <- fbigdatar %>% 
+  filter(!(FACSGate=="p6"&BiologicalReplicate=="C"&
+      PCRreplicate%in%c(1))
+    ) %>%
+#  filter(!(FACSGate=="p3"&BiologicalReplicate=="A")) %>%
+  filter(!(FACSGate%in%c("p2","p3","p4","p5","p6")&
+      BiologicalReplicate=="A"&PCRreplicate==3)
+    ) %>% ungroup() %>% 
+  select(SampleIndex,BiologicalReplicate,PCRreplicate,Shifted
+    ,FACSGate,LowerBound,UpperBound,MeanSignalInBin
+    ,Events,TotalEvents
+    ,Strain,Common
+    ,RawCounts,TotalRawCounts,EstInput,TotalEstInput
+  ) %>% arrange(Strain)
+```
+
+```{r,finalplot,cache=T,fig.width=10,fig.height=5}
+
+g <- dat %>% 
+  select(BiologicalReplicate,FACSGate,Shifted
+    ,RawCounts,EstInput,PCRreplicate,Strain
+    )%>%
+  gather(Variable,Value,EstInput,RawCounts) %>%
+  arrange(Variable,Strain)%>%
+  ggplot()+aes(x=Value,col=PCRreplicate)+
+    facet_grid(BiologicalReplicate~FACSGate+Shifted,scale="free_y")+
+    scale_x_log10()+#ylim(0,1.5)+
+    theme(legend.position="bottom",axis.text.x=element_text(angle=90))
+g+stat_bin(bins=80,geom="line",position="identity",alpha=0.3)+
+  stat_bin(bins=80,geom="point",position="identity",size=0.1)
+```
+
+Well that looks nice. Let's do one last PCA:
+
+```{r,pca,cache=T,warning=F}
+pcadatar <- as.matrix(dat %>% ungroup() %>% 
+  select(matches("SampleIndex"),matches("^EstInput$"),matches("Strain")) %>%
+  spread(key=SampleIndex,value="EstInput") %>%
+  select(matches("^\\d+$")))
+pcAnalysis <- pca(object=t(pcadatar),method="svd",scale="none",center=T,nPcs=10)
+plotdf <- scores(pcAnalysis)
+plotdf <- inner_join(
+  as_tibble(data.frame(SampleIndex=rownames(plotdf),plotdf,stringsAsFactors=F)),
+  fullSampleSheet, by="SampleIndex" )
+
+g<- plotdf%>%#filter(FACSGate!="input")%>%
+  mutate(Gate=c(p2=1,p3=2,p4=3,p5=4,p6=1,p7=2,p8=3,p9=4,input=NA)[FACSGate]) %>%
+  mutate(Sort=c(p2="Pre-shift",p3="Pre-shift",p4="Pre-shift",p5="Pre-shift",p6="Upshifted",p7="Upshifted",p8="Upshifted",p9="Upshifted",input="input")[FACSGate]) %>%
+  ggplot()+theme_bw()+
+  geom_line(color="grey20",linetype="dashed"
+    ,aes(group=factor(BiologicalReplicate):factor(FACSGate)))+
+  theme(legend.position="bottom")+
+  aes(col=factor(Gate),label=str_c(BiologicalReplicate))+
+  guides(col=guide_legend(title="Sample",nrow = 4))+
+  scale_color_brewer(palette="Set1",na.value="black"
+    ,labels=c(`1`="1",`2`="2",`3`="3",`4`="4",`NA`="ALL"))+
+  geom_point(size=0.01)+
+  facet_wrap(~Sort)+geom_text(size=3)+
+  guides(col=guide_legend(title="Low -> High gates",nrow = 1
+    ,override.aes=list(size=2)))
+g+aes(x=-PC1,y=PC2)
+
+g+aes(x=PC3,y=PC2)
+g+aes(x=PC3,y=PC4)
+```
+
+```{r}
+g <- cowplot::plot_grid(g+aes(x=PC1,y=PC2)
+#    ,g+aes(x=PC3,y=PC4)
+    ,ncol=1)
+
+ggsave("../output/Figure4_S_PCAonFilteredQCdData.un.tiff"
+  ,g,width=5,height=3)
+```
+
+====
+
+# modeling
+
+First, normalization. Let's define some terms. 
+
+I've got some $c_{ijkl}$ counts of a strain for each $i$-th strain, 
+$j$-th bin/gate (in combination with shifted or not), 
+$k$-th PCR replicate, $l$-th biological replicate.
+
+By counts, I mean raw or this `EstInput` which is adjusted for
+UMI saturation.
+
+We've got a proportion of counts 
+$p_{ijkl} = \frac{c_{ijkl}}{\Sigma_i c_{ijkl}}$ 
+is simply the counts per library over the total (post QC-ing and
+filtering), and we assume that's the chance that a mutant got
+selected to be sequenced from the sample, so the proportion of the
+mutant in that pool. Note that these are counts after doing the
+QC filtration above. This assumes that the counts per strain
+are linearly related to their abundance in the gDNA pool. 
+By counts, I mean raw or this `EstInput` which is adjusted for
+UMI saturation.
+
+If we've got $e_{jl}$ events in that bin/gate for each 
+biological replicate, then we'll define "psuedo-events" as being
+$u_{ijkl} = p_{ijkl}\frac{e_{jl}}{\Sigma_j e_{jl}}$. 
+So that oughta roughly be the
+cells of that strain that went into that bin, out of the whole
+library. The right term is roughly to just adjust between bins.
+
+Then we can take the mean of the technical repeats (because some
+worked and some didn't, on the library scale, so there's diff
+numbers of each) as the estimate of psuedo-events in 
+that bin.
+
+Then we can look at each biological replicate, or sum them up
+for the MLE modeling.
+
+Below, we re-normalize.
+
+```{r,normalizationAndMunging,cache=T}
+dat <- dat %>% select(-TotalRawCounts,-TotalEstInput) %>%
+  gather(Metric,Signal,RawCounts,EstInput) 
+dat <- full_join(
+  dat %>% group_by(SampleIndex,Metric)%>%
+    summarize(Total=sum(Signal,na.rm=T))
+  ,dat
+  ,by=c("SampleIndex","Metric")) %>% 
+  mutate(PropSignal=Signal/Total) %>% ungroup()
+```
+
+Hey, since we're here, how does the GC-composition look?
+
+```{r,gcComp,cache=T}
+gcTable <- nislowRevisionTable %>%
+  select(X1,X2)%>%
+  mutate(RawStats=map(X2,function(x){
+    z <- str_split(x,"")[[1]]; 
+    return(str_c( str_c(length(z),sum(z%in%c("G","C")),sep="_") ))}))%>%
+  unnest()%>%separate(RawStats,c("Length","GC"))%>%
+  mutate(GCcontent=as.numeric(GC)/as.numeric(Length),
+    Strain=X1)%>%
+  mutate(GCcontent=as.numeric(GCcontent),
+    GC=as.numeric(GC),
+    Length=as.numeric(Length))
+
+g <- left_join(
+  dat%>%select(Strain,PropSignal)%>% 
+    group_by(Strain)%>%summarize(PropSignal=mean(PropSignal))
+  ,gcTable
+  ,by=c("Strain")) %>%
+  gather(Variable,Value,Length,GC)%>%
+  ggplot()+aes(x=Value,group=Value,y=PropSignal)+
+  facet_wrap(~Variable,scale="free")+
+  scale_y_log10()+
+  geom_boxplot(width=0.75)+
+  xlab("")+ylab("Proportion of counts,\naveraged for each strain")
+g
+```
+
+```{r}
+ggsave("../output/Figure4_S_GClengthBiasBarcodes.pdf",g,width=5,height=5)
+ggsave("../output/Figure4_S_GClengthBiasBarcodes.un.tiff",g,width=5,height=5)
+```
+
+```{r,gcComp2,cache=T}
+left_join(
+  dat%>%select(Strain,PropSignal)%>% 
+    group_by(Strain)%>%summarize(PropSignal=mean(PropSignal))
+  ,gcTable
+  ,by=c("Strain"))%>%
+  ggplot()+aes(x=GCcontent,y=PropSignal)+theme_bw()+
+  geom_boxplot(aes(group=GCcontent))+
+  stat_smooth(method="lm",se=T)+
+  stat_smooth(color="red",se=T)+
+  coord_cartesian(ylim=c(0,0.0010))+
+  xlab("Fraction GC in barcode")+
+  ylab("Proportion of counts,\naveraged for each strain")
+
+left_join(dat%>%select(Strain,PropSignal),gcTable,by=c("Strain"))%>%
+  lm(formula=PropSignal~GCcontent)%>%summary()
+
+left_join(dat%>%select(Strain,PropSignal),gcTable,by=c("Strain"))%>%
+  lm(formula=PropSignal~GCcontent*factor(GCcontent>.45))%>%summary()
+```
+
+Okay, so there's a slight negative trend against GC content in the
+main strain barcode. Ce la sequencing. 
+We'll assume that it's the same across samples, since they were
+amplified with the same protocol. They had roughly similar input
+libraries, and we assume the biological contribution to complexity 
+doesn't correlated with GC content of the strain barcode.
+If someone wanted to, I'd imagine this effect would decrease if you
+were able to increase melting time in the amp cycles.
+
+
+```{r,tidyForModeling,cache=T}
+modelingdat <- dat %>% group_by(SampleIndex,Strain)%>% 
+  mutate(PsuedoEvents=PropSignal*Events/TotalEvents)%>%
+  ungroup()%>%
+  select(Metric
+    ,Strain,Common
+    ,BiologicalReplicate,Shifted,FACSGate,PCRreplicate
+    ,LowerBound,UpperBound,MeanSignalInBin
+    ,Signal
+    ,PropSignal,PsuedoEvents)
+```
+
+```{r,saveDat}
+dim(modelingdat)
+glimpse(modelingdat)
+
+save(modelingdat,file="../tmp/dme209modelingDat.RData")
+```
+
+```{r}
+sessionInfo()
+```
+

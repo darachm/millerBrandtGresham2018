@@ -1,0 +1,253 @@
+---
+title: "This makes Figure 1"
+author: "Darach"
+date: "`r Sys.Date()`"
+---
+
+
+```{r,loading}
+library(tidyverse)
+library(ggrepel)
+library(stringr)
+load("../tmp/airoldiPCAanalysis.RData")
+load("../tmp/coulterCounterData.RData")
+load("../tmp/NameIDList.RData")
+read_tsv("../data/sgd_go_slim_171013.txt",col_names=F
+  ,comment="!") -> SGDGOSlim
+read_tsv("../data/sgd_go_terms_171013.txt",col_names=F
+  ,comment="!") %>%
+  mutate(GOID=str_c("GO:"
+    ,str_pad(string=X1,width=7,side="left",pad="0"))
+    ) -> SGDGOTerms
+```
+
+```{r,makeFigure1a}
+gss <- plotobj%>%unite(Experiment,Experiment,Timescale,sep="")%>%
+  ggplot()+
+  aes(col=DilutionRate)+
+  theme_classic()+
+#  theme_bw()+
+  geom_point(data=plotobj%>%filter(SteadyState),size=2)+
+  scale_color_gradient(expression(atop("Steady-state\ngrowth rate","(hr"^-1*")")),
+#    low="#91bfdb",high="#fc8d59")+
+    low="#CC79A7",high="green")+
+  theme(legend.position="bottom",legend.key.size=unit(.5,"cm"))+
+  guides(linetype=guide_legend(ncol=1))+
+  scale_linetype_discrete("Upshift time-series"
+    ,labels=c(`400uM pulse\nglutamine, batch`="batch"
+      ,`40uM pulse\nglutamine, chemostat`="chemostat"
+      )
+    )
+
+gpre <- gss 
+gpre_pc12 <- gpre+aes(x=PC1,y=PC2,shape=Experiment)+
+  scale_shape_manual(values=c(16)
+    ,labels=c("Steady-state"))+
+  guides(linetype=F,shape=guide_legend(ncol=2))+
+  xlab(str_c("PC1\n",signif(sqsbPca@R2[1]*100,3),"% variance"))+
+  ylab(str_c("PC2\n",signif(sqsbPca@R2[2]*100,3),"% variance"))+
+  coord_cartesian(xlim=range(plotobj$PC1),ylim=range(plotobj$PC2))
+gpre_pc12
+
+gtwo <- gss +
+  geom_line(data=plotobj%>%filter(Timescale=="Short-term")
+    ,stat="smooth",method="lm",se=F,col="grey80"
+    ,aes(group=Experiment)#,linetype=Experiment)
+    ,arrow=arrow())+
+  geom_line(data=plotobj%>%filter(Experiment=="chemostat")
+    ,stat="smooth",method="lm",se=F,col="grey80"
+    ,aes(group=Experiment)#,linetype=Experiment)
+    ,arrow=arrow(ends="first"))+
+  geom_line(data=plotobj%>%filter(Experiment=="chemostat")
+    ,stat="smooth",method="lm",aes(group=Experiment),se=F,col="grey80")+
+  geom_point(data=plotobj%>%filter(Timescale=="Short-term")
+    ,size=2)+
+  geom_text_repel(data=plotobj%>%
+    filter(!SteadyState,Timescale=="Short-term"),
+    box.padding=unit(0.5,"lines"),
+    color="black",aes(label=paste(PulseSeconds,"s"))
+    )
+gtwo_pc12 <- gtwo+aes(x=PC1,y=PC2,shape=Experiment)+
+  scale_shape_manual(values=c(17,15,16)
+    ,labels=c("Batch upshift","Chemostat\nupshift","Chemostat\nsteady-state"))+
+  theme(text=element_text(size=10),legend.spacing.x=unit(04,"lines"))+
+  guides(linetype=F,shape=guide_legend(ncol=1,title=""))+
+  xlab(str_c("PC1\n",signif(sqsbPca@R2[1]*100,3),"% variance"))+
+  ylab(str_c("PC2\n",signif(sqsbPca@R2[2]*100,3),"% variance"))+
+  coord_cartesian(xlim=range(plotobj$PC1),ylim=range(plotobj$PC2))
+gtwo_pc12
+
+fig1a <- gtwo_pc12
+
+gall <- gss +
+  geom_point(data=plotobj%>%filter(!SteadyState),size=2)+
+  geom_text_repel(data=plotobj%>%filter(!SteadyState),
+    box.padding=unit(0.5,"lines"),
+    color="black",aes(label=paste(PulseSeconds,"s")))+
+  geom_path(data=plotobj%>%filter(!SteadyState),
+    aes(group=factor(Experiment):factor(Timescale),linetype=Experiment))
+gall_pc12 <- gall+aes(x=PC1,y=PC2,shape=Experiment)+
+  scale_shape_manual(values=c(17,15,16)
+    ,labels=c("Batch upshift","Chemostat upshift","Steady-state"))+
+  scale_linetype_discrete("Upshift\ntime-series"
+    ,labels=c(`400uM pulse\nglutamine, batch`="batch"
+      ,`40uM pulse\nglutamine, chemostat`="chemostat"
+      )
+    )+
+  guides(shape=guide_legend(ncol=1))+
+  xlab(str_c("PC1\n",signif(sqsbPca@R2[1]*100,3),"% variance"))+
+  ylab(str_c("PC2\n",signif(sqsbPca@R2[2]*100,3),"% variance"))+
+  coord_cartesian(xlim=range(plotobj$PC1),ylim=range(plotobj$PC2))
+gall_pc12
+
+```
+
+```{r}
+ggsave("../output/Figure1_S_longTermPCA.un.tiff",gall_pc12,width=7,height=5)
+```
+
+```{r,makeTimeplot}
+timeplot <- plotobj%>%filter(Experiment!="chemostat") %>%
+  unite(Experiment,Experiment,Timescale,sep="") %>%
+  gather(WhichPC,Value,PC1,PC2)%>% 
+  ggplot()+
+  aes(x=as.numeric(PulseSeconds)/60,y=Value,col=Experiment)+
+  facet_wrap(~WhichPC)+
+  theme_classic()+ #  theme_bw()+
+  geom_point(size=2)+
+  theme(legend.position="bottom",legend.key.size=unit(.5,"cm"))+
+  xlim(0,60)+
+  geom_line()+
+  xlab("Minutes after glutamine addition")+
+  ylab("Component loading")+
+  scale_color_discrete(labels=c(
+    `400uM pulse\nglutamine, batchShort-term`="400uM glutamine, batch",
+    `40uM pulse\nglutamine, chemostatLong-term`="40uM glutamine, chemostat, long run",
+    `40uM pulse\nglutamine, chemostatShort-term`="40uM glutamine, chemostat, short run"
+    ))
+```
+
+```{r}
+ggsave("../output/Figure1_S_timeplot.un.tiff",timeplot,width=7,height=4)
+```
+
+
+
+```{r,fig2bc}
+# using log10 to make plotting behave nicely
+firstGrowthModel <- lm(data=subset(plotdatar,Hours<(0+2)),
+  log10(e6CellsPerMl)~Hours)
+prolineGR <- log(2)/firstGrowthModel$coefficients[2]/log(10)
+
+secondGrowthModel <- lm(data=subset(plotdatar,Hours>=(0+2)),
+  log10(e6CellsPerMl)~Hours)
+glutamineGR <- log(2)/secondGrowthModel$coefficients[2]/log(10)
+
+g<-ggplot(plotdatar)+aes(x=Hours,y=e6CellsPerMl)+
+#  theme_classic()+
+  theme_bw()+
+  theme(text=element_text(size=10))+
+  geom_point()+
+  ylab(expression("Cell count ("*10^6*""/"mL)"))+
+  xlab("Hours")+
+  scale_y_log10(breaks=c(1,2,4,8,16))+
+  scale_x_continuous(breaks=seq(-4,7,2),limits=c(-4.5,6.5))+
+  annotate(geom="text",x=-0.7,y=7,angle=270,size=3,
+    label="Glutamine\naddition")+
+  geom_vline(xintercept=0,linetype="solid")
+g
+fig1b<-g+geom_abline(intercept=firstGrowthModel$coefficients[1],
+  slope=firstGrowthModel$coefficients[2],linetype="dotted",alpha=0.5)+
+  geom_abline(intercept=secondGrowthModel$coefficients[1],
+    slope=secondGrowthModel$coefficients[2],linetype="dotted",alpha=0.5)+
+#  annotate(geom="label",x=-2.0,y=14,label="Pre-shift",size=4)+
+#  annotate(geom="label",x=1.5,y=14,label="Post-shift",size=4)+
+  annotate(geom="text",x=-2.5,y=3,
+    label=paste0(signif(prolineGR,3)," hour\ndoubling time"))+
+  annotate(geom="text",x=3,y=9,
+    label=paste0(signif(glutamineGR,3)," hour\ndoubling time"))
+fig1b
+
+fig1c <- ggplot(plotdatar)+theme_bw()+#theme_classic()+
+  aes(x=Hours,y=Mean)+
+  geom_point()+
+  xlab("Hours")+
+  ylab(expression("Mean cell diameter ("*mu*"m)"))+
+  theme(text=element_text(size=10))+
+  geom_vline(xintercept=0,linetype="solid")+
+#  annotate(geom="label",x=-1.0,y=4.43,label="Pre-shift")+
+#  annotate(geom="label",x=1.0,y=4.43,label="Post-shift")+
+  geom_hline(yintercept=mean(subset(plotdatar,Hours<0)$Mean),
+    linetype="dotted")+
+  geom_hline(yintercept=mean(subset(plotdatar,Hours>2)$Mean),
+    linetype="dotted")+
+  annotate(geom="text",x=-0.7,y=4.28,angle=270,size=03,
+    label="Glutamine\naddition")+
+  scale_y_continuous(breaks=seq(4,5,0.1),limits=c(4.05,4.46))+
+  scale_x_continuous(breaks=seq(-4,7,2),limits=c(-4.5,6.5))
+fig1c
+```
+
+```{r,coulterVolumes}
+
+g <- summaryStats %>% 
+  select(-Min.,-Max.)%>%
+  gather(Variable,Value,-Hours) %>% 
+  ggplot()+theme_bw()+
+  aes(x=Hours,y=Value)+
+  facet_grid(Variable~.,scale="free_y")+
+  geom_point()+
+  ylab("Microns")+
+  geom_vline(xintercept=0)+
+  geom_vline(xintercept=2)
+g
+
+ggsave("../output/Figure1_S_coulterCounterUpshiftOtherStats.un.tiff",g
+  ,width=7,height=6)
+
+summaryStats%>%filter(Hours<0|Hours>2)%>%group_by(Hours>0)%>%
+  summarize(PrePostMean=mean(Mean)) %>%
+  mutate(Volume=4/3*pi*(0.5*PrePostMean)^3)%>%
+  dplyr::select(-PrePostMean) %>%
+  spread(`Hours > 0`,Volume) %>%
+  { .$`TRUE` / .$`FALSE` } %>%
+  signif(digits=3)
+```
+
+```{r,togethernow}
+g <- cowplot::plot_grid(NULL
+  ,cowplot::plot_grid(
+    fig1b+theme(plot.margin=unit(c(0.5,0.5,0.5,0.5),"cm"))
+    ,NULL
+    ,fig1c+theme(plot.margin=unit(c(0.5,0.5,0.5,0.5),"cm"))
+    ,ncol=1,align="v",axis="lr"
+    ,labels=c("A","","B"),hjust=0
+    ,rel_heights=c(0.55,-.02,0.45)
+    )
+  ,cowplot::plot_grid(
+    fig1a+theme(plot.margin=unit(c(0.5,0.5,0.5,0.5),"cm"))
+    ,NULL,ncol=1
+    ,rel_heights=c(0.9,0.1)
+    ,labels=c("C","")
+    )
+  ,NULL
+  ,rel_widths=c(0.01,.5,.5,0.03)
+  ,ncol=4,align="v",axis="lr")
+g
+
+ggsave("../output/Figure1.un.tiff",g,width=7,height=5)
+ggsave("../output/Figure1.un.pdf",g,width=7,height=5,device=cairo_pdf)
+
+g <- cowplot::plot_grid(
+  fig1b+theme(plot.margin=unit(c(0.5,0.5,0.5,0.5),"cm"))
+  ,fig1c+theme(plot.margin=unit(c(0.5,0.5,0.5,0.5),"cm"))
+  ,ncol=1,align="v",axis="lr"
+  ,rel_heights=c(0.55,0.45)
+  )
+g
+```
+
+```{r}
+sessionInfo()
+```
+

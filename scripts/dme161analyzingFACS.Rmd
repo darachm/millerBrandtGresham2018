@@ -1,0 +1,263 @@
+---
+title: "dme161 facs and microscopy, the wild-type behavior"
+author: "Darach"
+date: "`r Sys.Date()`"
+---
+
+# importing
+
+First, libraries.
+
+```{r}
+library(tidyverse)
+library(stringr)
+```
+
+No sample sheet, we just hardcode it.
+
+```{r,readmeta,cache=T}
+
+sampleSheet <- tibble(
+  Filename=list.files(path="../data/dme161/facs",
+    pattern="Specimen.*fcs",full.names=T)
+  ) %>% filter(!grepl(".+_1.fcs$",Filename)) %>%
+  mutate(RelevantBit=sub(".*Specimen_\\d{3}_","",Filename)) %>%
+  mutate(RelevantBit=sub("2-n","2+n",RelevantBit)) %>%
+  mutate(FACS=grepl("_001",RelevantBit)) %>%
+  mutate(Sample=sub("(\\d+)[+-]?.*","\\1",RelevantBit)) %>%
+  mutate(SampleTime=c(`2`=0,`6`=2+39/60,`10`=12+36/60,`14`=60)[Sample]) %>%
+  mutate(DAPI=ifelse(grepl("nD",RelevantBit),"No DAPI","DAPI")) %>%
+  mutate(TargetProbe=ifelse(grepl("\\+",RelevantBit),
+    "Target Probe","No Target")) %>%
+  mutate(LabelProbe=ifelse(grepl("nL",RelevantBit),"No Label","Label Probe")) %>%
+  filter(!is.na(SampleTime))
+sampleSheet[,-1]
+
+datar <- sampleSheet %>% group_by(Filename) %>% 
+  mutate(RawFile=list(
+    data.frame(flowCore::exprs(flowCore::read.FCS(Filename))))) %>%
+  unnest()
+
+minApc <- round(min(datar$APC.A)-50)
+minPb <- round(min(datar$Pacific.Blue.A)-50)
+
+datar <- datar %>%
+  mutate(APC.A=APC.A-minApc) %>%
+  mutate(Pacific.Blue.A=Pacific.Blue.A-minPb)
+
+```
+
+```{r,exploreAndGate1,cache=T}
+
+g <- datar %>% filter(!is.na(FSC.W)) %>%
+  ggplot(aes(x=FSC.A,y=FSC.A/FSC.W))+
+  geom_point(size=0.1)+
+  facet_wrap(~RelevantBit)
+g+scale_y_log10()+scale_x_log10()
+g+geom_abline(slope=1.5e-5,intercept=-0.01)
+
+g <- datar %>% filter(!is.na(FSC.W),(FSC.A/FSC.W)>1.5e-5*FSC.A-.01) %>%
+  ggplot(aes(x=FSC.A,y=FSC.A/FSC.W))+
+  geom_point(size=0.1)+
+  facet_wrap(~RelevantBit)
+g+scale_y_log10()+scale_x_log10()
+
+```
+
+
+```{r,exploreAndGate2,cache=T}
+
+datar %>% ggplot(aes(x=Pacific.Blue.A,y=APC.A))+
+  geom_point(size=0.1,alpha=0.1)+scale_y_log10()+scale_x_log10()+
+  facet_grid(SampleTime~DAPI+TargetProbe+LabelProbe)+
+  geom_vline(xintercept=400-minPb,col="blue",linetype="dashed")
+
+gated161Datar <- datar %>% 
+  filter(Pacific.Blue.A>(400-minPb),DAPI=="DAPI",
+    LabelProbe=="Label Probe")
+```
+
+```{r,saveit}
+save(gated161Datar,minPb,file="../tmp/dme161flowdata.RData")
+```
+
+```{r,exploreAndGate3,cache=T}
+g <- datar %>% 
+  filter(Pacific.Blue.A>(400-minPb),
+    DAPI=="DAPI",LabelProbe=="Label Probe",
+    SampleTime<30) %>%
+  ggplot(aes(x=APC.A,y=..density..))+
+    theme_bw()+
+    stat_bin(bins=080,position="identity",alpha=0.80,geom="line",
+      aes(col=factor(SampleTime):factor(TargetProbe)))+
+    stat_bin(bins=080,position="identity",alpha=0.80,geom="point",
+      aes(col=factor(SampleTime):factor(TargetProbe)))+
+    scale_color_manual("Sample",labels=c(
+        `0:No Target`="\nNo probe\nnegative control\n0min\n",
+        `0:Target Probe`="0min + probe\n",
+        `2.65:Target Probe`="3min after upshift\n+ probe\n",
+        `12.6:Target Probe`="13min after upshift\n+ probe\n"
+        ),values=c(
+        `0:No Target`="#e41a1c"
+        ,`0:Target Probe`="#377eb8"
+        ,`2.65:Target Probe`="#4daf4a"
+        ,`12.6:Target Probe`="#ff7f00"
+      ))+
+    scale_x_log10(breaks=10^(0:5))+
+    coord_cartesian(xlim=c(1e2,1e4))+
+    theme(axis.text.x=element_text(angle=90))+
+    ylab("Density")+xlab("GAP1 mRNA FISH signal")
+g
+
+g0 <- datar %>% 
+  filter(Pacific.Blue.A>(400-minPb),
+    DAPI=="DAPI",LabelProbe=="Label Probe",
+    SampleTime<30,
+    SampleTime==0) %>%
+  ggplot(aes(x=APC.A,y=..density..))+
+    theme_bw()+
+    stat_bin(bins=080,position="identity",alpha=0.80,geom="line",
+      aes(col=factor(SampleTime):factor(TargetProbe)))+
+    stat_bin(bins=080,position="identity",alpha=0.80,geom="point",
+      aes(col=factor(SampleTime):factor(TargetProbe)))+
+    scale_color_manual("Sample",labels=c(
+        `0:No Target`="\nNo probe\nnegative control\n0min\n",
+        `0:Target Probe`="0min + probe\n",
+        `2.65:Target Probe`="3min after upshift\n+ probe\n",
+        `12.6:Target Probe`="13min after upshift\n+ probe\n"
+        ),values=c(
+        `0:No Target`="#CC79A7"
+        ,`0:Target Probe`="#377eb8"
+        ,`2.65:Target Probe`="#4daf4a"
+        ,`12.6:Target Probe`="#ff7f00"
+      ))+
+    scale_x_log10(breaks=10^(0:5))+
+    coord_cartesian(xlim=c(1e2,1e4))+
+    theme(axis.text.x=element_text(angle=90))+
+    ylab("Density")+xlab("GAP1 mRNA FISH signal")+
+    theme(legend.position="bottom")
+g0
+
+g1 <- datar %>% 
+  filter(Pacific.Blue.A>(400-minPb),
+    DAPI=="DAPI",LabelProbe=="Label Probe",
+    SampleTime<30) %>%
+  ggplot(aes(x=APC.A,y=..density..))+
+    theme_bw()+
+    stat_bin(bins=080,position="identity",alpha=0.80,geom="line",
+      aes(col=factor(SampleTime):factor(TargetProbe)))+
+    stat_bin(bins=080,position="identity",alpha=0.80,geom="point",
+      aes(col=factor(SampleTime):factor(TargetProbe)))+
+    scale_color_manual("Sample",labels=c(
+        `0:No Target`="\nNo probe\nnegative control\n0min\n",
+        `0:Target Probe`="0min + probe\n",
+        `2.65:Target Probe`="3min after upshift\n+ probe\n",
+        `12.6:Target Probe`="13min after upshift\n+ probe\n"
+        ),values=c(
+        `0:No Target`="#CC79A7"
+        ,`0:Target Probe`="#377eb8"
+        ,`2.65:Target Probe`="#4daf4a"
+        ,`12.6:Target Probe`="#ff7f00"
+      ))+
+    scale_x_log10(breaks=10^(0:5))+
+    coord_cartesian(xlim=c(1e2,1e4))+
+    theme(axis.text.x=element_text(angle=90))+
+    ylab("Density")+xlab("GAP1 mRNA FISH signal")+
+    theme(legend.position="bottom")
+g1
+
+
+```
+
+```{r,exploreAndGate4,cache=T}
+gatez <- tibble(
+  BinName=str_c("Sort Bin ",c("A","B","C","D")),
+  LowerBound=c(-160,241,801,2051)-minApc,
+  UpperBound=c(240,800,2050,10900)-minApc
+) %>% group_by(BinName) %>%
+  mutate(BinAvg=10^(mean(log10(c(LowerBound,UpperBound)))))
+
+dme161gatez <- gatez
+
+g2 <- g+geom_segment(data=gatez,linetype="dotted",
+    arrow=arrow(ends="both",angle=90,length=unit(5,"inches")),
+    aes(x=LowerBound,xend=UpperBound,y=0,yend=0))+
+  geom_text(data=gatez,aes(x=BinAvg,y=2.5,label=BinName),angle=60)
+
+g3 <- g%+%(datar%>%filter(SampleTime=="2.65"))+
+  geom_segment(data=gatez,linetype="solid",col="grey",
+    arrow=arrow(ends="both",angle=90,length=unit(5,"inches")),
+    aes(x=LowerBound,xend=UpperBound,y=0,yend=0))+
+  coord_cartesian(xlim=c(100,08500))+
+  ylab("")+theme(legend.position="bottom",axis.text.y=element_blank())#+ geom_text(data=gatez,aes(x=BinAvg,y=1.3,label=BinName),angle=0)
+g3
+
+
+```
+
+```{r,savegates}
+save(dme161gatez,file="../tmp/dme161gatez.RData")
+```
+
+```{r,fittingDistributions,cache=T}
+fitDatar <- datar %>% filter(Pacific.Blue.A>(400-minPb),
+    DAPI=="DAPI",LabelProbe=="Label Probe",
+    SampleTime<30) %>% ungroup()
+
+negControl <- log10(unlist(fitDatar %>% 
+  filter(SampleTime==0,TargetProbe=="No Target") %>% select(APC.A)))
+
+posControl <- log10(unlist(fitDatar %>% 
+  filter(SampleTime==0,TargetProbe=="Target Probe") %>% select(APC.A)))
+```
+
+```{r,fittingDistributions1,cache=T}
+offll <- function(meanz,sdz) {
+  return(-sum(log(
+    dnorm(negControl,mean=meanz,sd=sdz)
+  )))
+}
+offmod <- stats4::mle(minuslogl=offll,start=list(meanz=2,sdz=1))
+
+offplot <- hist(negControl,100,plot=F)
+ggplot(data.frame(x=offplot$mids,y=offplot$density),aes(x=x,y=y))+
+  geom_bar(stat="identity")+
+  stat_function(size=2,alpha=0.5,col="blue",fun=function(x){
+    dnorm(x,mean=offmod@coef[1],sd=offmod@coef[2])})
+```
+
+Blue is the fit.  
+This really needs a skewed normal, I think there's packages with
+those?
+
+```{r,fittingDistributions2cache=T}
+onll <- function(p1,meanz,sdz) {
+  return(-sum(log(
+    p1*dnorm(posControl,mean=offmod@coef[1],sd=offmod@coef[2])+
+    (1-p1)*dnorm(posControl,mean=meanz,sd=sdz)
+  )))
+}
+onmod <- stats4::mle(minuslogl=onll,
+  start=list(p1=0.1,meanz=3,sdz=.1))
+onplot <- hist(posControl,100,plot=F)
+ggplot(data.frame(x=onplot$mids,y=onplot$density),aes(x=x,y=y))+
+  geom_bar(stat="identity")+
+  stat_function(size=2,alpha=0.5,col="blue",fun=function(x){
+    dnorm(x,mean=offmod@coef[1],sd=offmod@coef[2])*onmod@coef[1]})+
+  stat_function(size=2,alpha=0.5,col="yellow",fun=function(x){
+    dnorm(x,mean=onmod@coef[2],sd=onmod@coef[3])*(1-onmod@coef[1])})+
+  stat_function(size=2,alpha=0.5,col="green",fun=function(x){
+    dnorm(x,mean=offmod@coef[1],sd=offmod@coef[2])*onmod@coef[1]+
+    dnorm(x,mean=onmod@coef[2],sd=onmod@coef[3])*(1-onmod@coef[1])})
+```
+
+Blue is the fit propotion of a distribution with the same mean and
+sd as negative, yellow is a fit larger distribution, and green
+is their sum. Says off population is `r onmod@coef[1]` of the
+sample.
+
+
+```{r}
+sessionInfo()
+```
+

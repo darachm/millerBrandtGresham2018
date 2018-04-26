@@ -1,0 +1,1874 @@
+---
+title: "Analyzing pulse-chase sequencing results (dme211)"
+author: "Darach"
+date: "`r Sys.Date()`"
+---
+
+This is the analysis of the 4tU pulse-chase sequencing results.
+
+# Preliminaries and loading
+
+```{r,libraries,cache=F,warning=F,error=F,message=F}
+library(tidyverse)
+library(knitr)
+library(stringr)
+library(plyr)
+library(ggrepel)
+load("../tmp/NameIDList.RData")
+```
+
+```{r,readingIn,message=F,warning=F}
+load(file="../tmp/dme211datarForModeling.RData")
+load(file="../tmp/dme211fitModels.RData")
+load(file="../tmp/dme211fitModelsDirect.RData")
+load(file="../tmp/dme211bonafideDegraders.RData")
+load(file="../tmp/dme211fitMaudz.RData")
+load(file="../tmp/dme211fitMaudzAltNorm.RData")
+godard2007st2 <- read.csv("../data/godard2007ncrModified.csv")
+godard2007st2[,-c(1,2)] <- apply(godard2007st2[,-c(1,2)],2,function(x){x=="✔"})
+airoldiS5 <- read_csv("../data/airoldiEtAl2016MBoC/TableS5.csv")
+ls()
+```
+
+Okay, got the data and everything loaded. 
+
+In the `dme211labelingDynamics` analysis (Rmd or HTML files), we
+investigated the possibility that rates are controlled by
+the incomplete chase and transcriptional changes.
+We determine that a 2-fold acceleration of degradation is
+a pretty clear cut-off, and we can't really say much about
+potential stabilization, so we just apply the cutoff.
+
+```{r,theResults,cache=T}
+
+maudzAltNorm$Common <- renameSystematicToCommon[maudzAltNorm$Systematic]
+maudz$Common <- renameSystematicToCommon[maudz$Systematic]
+
+length(bonafideAccelDeg)
+length(bonafideAccelDegDirect)
+
+displayTable <- maudzAltNorm %>% filter(Variable!="(Intercept)")%>%
+  dplyr::select(Systematic,Common,Variable,Estimate)%>%
+  spread(Variable,Estimate)
+
+print("Less stable")
+kable(displayTable%>%filter(Systematic%in%bonafideAccelDeg))
+```
+
+Here we define those result tables. We classify our transcripts in
+a couple of ways. First, the significantly destabilized are defined
+as above. Then I identify all the transcripts with a change rate
+q-value greater than 0.2 and less than a 1 fold up or down change in 
+degradation rates, and call those as "no change". The others are
+sort of in between, and I call those as "not-significant".
+I'm doing this so that when looking for explanatory cis-elements
+I can make sure that something just slightly below our threshold
+does sink our abilities to discriminate explanatory elements.
+
+To clarify, "Called" will just denote significant or not. "Class"
+will denote if it falls into this questionable significance area.
+
+```{r,resultTable,cache=T}
+
+resultTable <- maudzAltNorm %>% 
+  group_by(Systematic,Common) %>%
+  filter(Variable%in%c("BasalRate","ChangeRate")) %>%
+  mutate(Pvalue=Pr...t..,StandardError=Std..Error,Tvalue=t.value) %>%
+  dplyr::select(-Pr...t..,-Std..Error,-t.value) %>%
+  gather(Type,Value,Estimate,Tvalue,StandardError,Pvalue,QValue) %>% 
+  unite(Variable,Variable,Type,sep="_") %>%
+  spread(Variable,Value)%>%
+  mutate(Called="NoChange")%>%
+  mutate(Called=ifelse(Systematic%in%bonafideAccelDeg,"AccelDeg",Called)) %>%
+  mutate(Class="NotSignificant")%>%
+  mutate(Class=ifelse(Systematic%in%bonafideAccelDeg,"AccelDeg",Class)) %>%
+  mutate(Class=ifelse(
+    ChangeRate_QValue>0.2&abs(ChangeRate_Estimate/BasalRate_Estimate)<1
+    ,"NoChange",Class))
+
+resultTableDirect <- maudz %>% 
+  group_by(Systematic,Common) %>%
+  filter(Variable%in%c("BasalRate","ChangeRate")) %>%
+  mutate(Pvalue=Pr...t..,StandardError=Std..Error,Tvalue=t.value) %>%
+  dplyr::select(-Pr...t..,-Std..Error,-t.value) %>%
+  gather(Type,Value,Estimate,Tvalue,StandardError,Pvalue,QValue) %>% 
+  unite(Variable,Variable,Type,sep="_") %>%
+  spread(Variable,Value)%>%
+  mutate(Called="NoChange")%>%
+  mutate(Called=ifelse(Systematic%in%bonafideAccelDegDirect,"AccelDeg",Called))%>%
+  mutate(Class="NotSignificant")%>%
+  mutate(Class=ifelse(Systematic%in%bonafideAccelDegDirect,"AccelDeg",Class)) %>%
+  mutate(Class=ifelse(
+    ChangeRate_QValue>0.2&abs(ChangeRate_Estimate/BasalRate_Estimate)<1
+    ,"NoChange",Class))
+```
+
+And those I write out for the supplement.
+
+```{r,writingResultsForOtherTools}
+write_lines("#
+# Supplementary Table
+#
+# Parameters of log-linear degradation models fit to the pulse-chase
+# data. These are fit to data normalized with the modeled approach,
+# ie the model-smoothed spike-ins approach.
+#
+# Key:
+# Systematic name , common name , pre-shift estimated rate of degradation , pre-shift rate p-value for slope , pre-shift FDR adjusted p.value , pre-shift standard error of model , pre-shift rate t-statistic , change of rate estimate , change or rate p-value , change or rate FDR adjusted p-value , change or rate standard error , change or rate t-statistic , if the gene transcript is called as destabilized , class of transcript with regards to stability , adjusted R2"
+  ,path="../output/Figure2_Table_PulseChaseModelingResultTable_ModelNormalization.csv")
+write_csv(resultTable%>%
+  dplyr::rename(
+    PreShiftRate_Estimate=BasalRate_Estimate
+    ,PreShiftRate_Pvalue=BasalRate_Pvalue
+    ,PreShiftRate_QValue=BasalRate_QValue
+    ,PreShiftRate_StandardError=BasalRate_StandardError
+    ,PreShiftRate_Tvalue=BasalRate_Tvalue
+    ,ChangeUponUpshiftRate_Estimate=ChangeRate_Estimate
+    ,ChangeUponUpshiftRate_Pvalue=ChangeRate_Pvalue
+    ,ChangeUponUpshiftRate_QValue=ChangeRate_QValue
+    ,ChangeUponUpshiftRate_StandardError=ChangeRate_StandardError
+    ,ChangeUponUpshiftRate_Tvalue=ChangeRate_Tvalue
+    ,AdjustedR2=AdjR2
+    )%>%dplyr::select(-AdjustedR2,everything())
+  ,path="../output/Figure2_Table_PulseChaseModelingResultTable_ModelNormalization.csv"
+  ,append=T)
+
+write_lines("#
+# Supplementary Table X:
+#
+# Parameters of log-linear degradation models fit to the pulse-chase
+# data. These are fit to data directly normalized to spike-ins
+# within each sample, no smoothing of proportions across timepoints.
+#
+# Key:
+# Systematic name , common name , pre-shift estimated rate of degradation , pre-shift rate p-value for slope , pre-shift FDR adjusted p.value , pre-shift standard error of model , pre-shift rate t-statistic , change of rate estimate , change or rate p-value , change or rate FDR adjusted p-value , change or rate standard error , change or rate t-statistic , if the gene transcript is called as destabilized , class of transcript with regards to stability , adjusted R2"
+  ,path="../output/Figure2_Table_PulseChaseModelingResultTable_DirectNormalization.csv")
+write_csv(resultTableDirect%>%
+  dplyr::rename(
+    PreShiftRate_Estimate=BasalRate_Estimate
+    ,PreShiftRate_Pvalue=BasalRate_Pvalue
+    ,PreShiftRate_QValue=BasalRate_QValue
+    ,PreShiftRate_StandardError=BasalRate_StandardError
+    ,PreShiftRate_Tvalue=BasalRate_Tvalue
+    ,ChangeUponUpshiftRate_Estimate=ChangeRate_Estimate
+    ,ChangeUponUpshiftRate_Pvalue=ChangeRate_Pvalue
+    ,ChangeUponUpshiftRate_QValue=ChangeRate_QValue
+    ,ChangeUponUpshiftRate_StandardError=ChangeRate_StandardError
+    ,ChangeUponUpshiftRate_Tvalue=ChangeRate_Tvalue
+    ,AdjustedR2=AdjR2
+    )%>%dplyr::select(-AdjustedR2,everything())
+  ,path="../output/Figure2_Table_PulseChaseModelingResultTable_DirectNormalization.csv"
+  ,append=T)
+
+save(list="resultTable",file="../tmp/dme211modelingResultTable.RData")
+save(list="resultTableDirect",file="../tmp/dme211modelingResultTableDirect.RData")
+```
+
+Then below I'll just plot all of them, for your inspection, in
+a PDF. So that PDF has a plot of all the data for the destabilized
+mRNAs.
+
+```{r,plotDegHits,cache=T,message=F,error=F,warning=F,echo=F}
+ggDrawAccelMod <- function(x,whichNorm="NormedModel",breakpoint=12.5) {
+  x$Abundance <- (x%>%dplyr::select_(whichNorm))[[1]] 
+  x <- subset(x,Abundance!=0)
+  x$Minutes <- x$Minutes-breakpoint
+  mod <- lm(data=x,log(Abundance)~Minutes+Minutes:Treated)
+#  print(unique(x$Common))
+  return(ggplot(x)+
+    aes(x=Minutes+breakpoint,y=log(Abundance),col=Treatment,
+      group=Treatment=="q"&Minutes>0)+  
+    geom_point()+geom_vline(xintercept=breakpoint,linetype="dashed")+
+    geom_line(data=data.frame(Abundance=exp(mod$fitted.values),
+       Minutes=x$Minutes,Treatment=x$Treatment,
+       Treated=x$Treated),
+      aes(group=Treated))+
+    ggtitle(unique(x$Common))+
+    xlab("Minutes of chase")+ylab("log( abundance, normalized )")
+  )}
+```
+
+There's a chunk here that plots these to a PDF, hidden to clean up
+document.
+
+```{r,plotDegHitsPDF,cache=T,message=F,error=F,warning=F,echo=F,include=F}
+pdf("../tmp/dme211modelPlots.pdf",width=6,height=4)
+lapply(bonafideAccelDeg,
+  function(x){ggDrawAccelMod(subset(datarForModeling,Systematic==x))})
+dev.off()
+```
+
+Here is a representative plot of the changes that occur.
+
+```{r,representative,cache=T,eval=T}
+multiPlot <- function(x) {
+  plotDatar <- subset(datarForModeling,Systematic%in%x&NormedDirect!=0)
+  plotDatar <- ddply(plotDatar,.(Systematic),function(x){return(
+      data.frame(x,fitted=fitted.values(modelzAltNorm[unique(as.character(x$Systematic))][[1]]))
+    )})
+  plotDatar <- plotDatar%>%
+    mutate(Name=factor(Systematic,levels=x))%>%
+    arrange(as.numeric(Name))%>%
+    mutate(Common=factor(Common,levels=unique(Common)))
+  return(ggplot(plotDatar)+aes(x=Minutes,group=Treatment)+
+    facet_wrap(~Common,scales="free_y",ncol=1,strip.position="right")+
+    geom_line(aes(y=fitted,group=Treated,lty=Treated))+
+    geom_point(aes(y=log(NormedDirect),col=Treatment),size=0.8)+
+    theme_bw()+
+    geom_vline(xintercept=12.5,linetype="dotted",color="black",alpha=1.0)+
+    xlab("Minutes after label chase")+
+    ylab("log( normalized abundance )")+
+    scale_linetype_discrete(guide=F,palette=function(x){c("solid","dashed")})+
+    scale_color_discrete("Treatment",labels=c(w="Mock (water)",q="Glutamine"))+
+    theme(legend.position="bottom")
+  )
+}
+multiPlot(renameCommonToSystematic[c("GAP1","GUA1","HTA1")])
+
+```
+
+# Rate distributions, comparison to other data
+
+These are plots of the distributions of these parameters, so 
+estimated degradation rate before the shift, post-shift, and of
+course the detected change. 
+
+First, need to generate this table of NCR affiliation.
+
+```{r,comparetoNCR,cache=T,eval=T}
+compNCR <- left_join(resultTable,
+  godard2007st2%>%mutate(Systematic=SystematicName)%>%
+    dplyr::select(-SystematicName)%>%
+    dplyr::select(Systematic,NCR,ProbableNCR,Scherens2006,Godard2007Cluster1),
+  by="Systematic") %>% 
+  mutate_at(vars(NCR,ProbableNCR,Scherens2006,Godard2007Cluster1),funs(ifelse(is.na(.),F,.))) %>%
+  mutate(anyNCR=ProbableNCR|NCR)
+```
+
+```{r,distributions,cache=T,eval=T}
+varnames <- c(`1_BasalRate_Estimate`="Upon addition of water (mock)",
+  `ChangeRate_Estimate`="The change in rate upon glutamine shift",
+  `2_Final`="Upon addition of glutamine")
+
+plotTable <- resultTable
+plotTable$Final <- plotTable$BasalRate_Estimate + plotTable$ChangeRate_Estimate
+tmp <- plotTable%>%dplyr::select(BasalRate_Estimate,Final,ChangeRate_Estimate,Systematic,ChangeRate_QValue,Called)%>%
+  mutate(`2_Final`=Final) %>%
+  mutate(`1_BasalRate_Estimate`=BasalRate_Estimate) %>%
+  gather(variable,value,`1_BasalRate_Estimate`,`2_Final`,ChangeRate_Estimate)
+g <- ggplot(tmp)+
+  geom_vline(xintercept=0)+
+  geom_histogram(bins=50,color="grey")+
+  aes(x=value)+
+  xlab("Rate of labeled abundance change\n(min^-1)")+
+  theme_bw()+ylab("Gene Features")+
+  facet_wrap(~variable,ncol=1,labeller=as_labeller(varnames))+
+  geom_rug(data=tmp%>%filter(Called!="NoChange"),
+    aes(col=Called),sides="b",size=1.0)+
+  scale_color_manual("Genes with significant\nchange in rate",
+    values=c(`AccelDeg`="red",Stabilized="blue"),
+    labels=c(`AccelDeg`="Accelerated degradation"))+#,Stabilized="Stabilized"))+
+  theme(legend.position="bottom")+
+  xlim(-.25,.25)+
+  guides(col=guide_legend(ncol=1))
+g
+```
+
+Here's a summary table of the stabilities during these different
+conditions, and then a histogram of the fold change in degradation
+rates.
+
+```{r,summarize}
+summaryStats <- bind_rows( 
+  resultTable%>%ungroup()%>%
+    mutate(FoldChange=(ChangeRate_Estimate+BasalRate_Estimate)/BasalRate_Estimate)%>%
+    dplyr::summarize(
+      `Median pre-shift`=-median(BasalRate_Estimate)
+      ,`Median change`=-median(ChangeRate_Estimate)
+      ,`Median post-shift`=-median(BasalRate_Estimate+ChangeRate_Estimate)
+      ,`Median fold change`=median(FoldChange)
+    ) %>% mutate(Called="Total")
+  ,resultTable%>%group_by(Called)%>%
+    mutate(FoldChange=(ChangeRate_Estimate+BasalRate_Estimate)/BasalRate_Estimate)%>%
+    dplyr::summarize(
+      `Median pre-shift`=-median(BasalRate_Estimate)
+      ,`Median change`=-median(ChangeRate_Estimate)
+      ,`Median post-shift`=-median(BasalRate_Estimate+ChangeRate_Estimate)
+      ,`Median fold change`=median(FoldChange)
+    )
+  ) %>%
+  gather(Variable,Value
+    ,`Median pre-shift`
+    ,`Median change`
+    ,`Median post-shift`
+    ,`Median fold change`
+    )%>%
+  mutate(Halflives=log(2)/Value)%>%
+  mutate(Value=signif(Value,3))%>%
+  mutate(Halflives=signif(Halflives,3)) %>%
+#  mutate(String=ifelse(!grepl("(fold)|(change)",Variable)
+#      ,str_c(Value," rate, ",Halflives," half-life")
+#      ,str_c(Value," rate")
+#      )
+#    )%>% 
+  full_join(resultTable%>%group_by(Called)%>%
+      dplyr::summarize(N=length(Systematic))
+    ,by="Called")%>%
+  mutate(Value=formatC(Value,digits=3,flag="#"))%>%
+  mutate(Halflives=formatC(Halflives,digits=3,flag="#"))%>%
+  mutate(Called=c(Total="All transcripts",AccelDeg="Destabilized"
+      ,NoChange="Unchanged")[Called]) #%>%
+#  mutate(Called=ifelse(is.na(N),Called,str_c(Called,", n=",N)))%>%
+#  dplyr::select(Called,Variable,String)%>%
+#  spread(Variable,String) %>% 
+#  dplyr::select(Called,matches("pre-shift"),matches("post-shift")
+#    ,matches("Median.change"),matches("fold.change")) 
+
+summaryStats %>%
+  write_csv(path="../output/Table_pulseChaseSummaryStatistics.csv")
+
+str_c("
+\\begin{table}[h!]
+\\caption{\\label{tab:table1} Summary of mRNA stability, median values}
+\\begin{tabular}{p{8em} | l l l l | l l}
+\\toprule
+& \\multicolumn{2}{c}{Pre-shift} & \\multicolumn{2}{c}{Post-shift} &
+Change in & Fold-change\\\\
+ & specific rate & half-life & specific rate & half-life & specific
+rate & specific rate\\\\
+ & (min$^{-1}$) & (min) & (min$^{-1}$) & (min) & (min$^{-1}$) & \\\\
+\\midrule
+\\raggedright All transcripts & "
+  ,summaryStats%>%filter(Called=="All transcripts")%>%
+  gather(Var,Value,Value,Halflives)%>%pull(Value)%>%
+  `[`(c(1,5,3,7,2,4)) %>% str_c(collapse=" & ")
+  ,"\\\\
+\\raggedright Destabilized (n="
+  ,summaryStats%>%filter(Called=="Destabilized")%>%pull(N)%>%unique
+  ,") & "
+  ,summaryStats%>%filter(Called=="Destabilized")%>%
+  gather(Var,Value,Value,Halflives)%>%pull(Value)%>%
+  `[`(c(1,5,3,7,2,4)) %>% str_c(collapse=" & ")
+  ,"\\\\
+\\raggedright No difference\\\\detected (n="
+  ,summaryStats%>%filter(Called=="Unchanged")%>%pull(N)%>%unique
+  ,") & "
+  ,summaryStats%>%filter(Called=="Unchanged")%>%
+  gather(Var,Value,Value,Halflives)%>%pull(Value)%>%
+  `[`(c(1,5,3,7,2,4)) %>% str_c(collapse=" & ")
+  ,"\\\\
+\\bottomrule
+\\end{tabular}
+\\end{table}") %>% write_lines("../output/Table1.tex")
+
+resultTable%>%
+  ggplot()+aes(x=ChangeRate_Estimate/ChangeRate_StandardError)+geom_histogram(bins=100)+
+  facet_wrap(~Called)
+
+```
+
+Now I want to compare it to expression. Since the only data I have
+is the MBoC paper, then that's what we have here. I use the fit
+rates as reported in the supplement.
+
+```{r,comparingRatesToMBoCpaper}
+tmp <- full_join(airoldiS5%>%mutate(Systematic=YORF),
+  resultTable
+  ,by="Systematic")%>% 
+  full_join(
+    compNCR%>%ungroup()%>%mutate(eitherNCR=NCR|ProbableNCR) %>%
+      dplyr::select(Systematic,NCR,ProbableNCR,eitherNCR)
+    ,by="Systematic") %>% 
+  filter(!is.na(Called)) %>%group_by(Systematic) %>%
+  mutate(Class=c(`NoChange`="NoChange",
+      `AccelDeg`="Destabilized")[ Called ])
+tmp$eitherNCR[is.na(tmp$eitherNCR)] <- F
+tmp <- tmp%>%
+  mutate(TotalRateOfDecayUponUpshift=BasalRate_Estimate+ChangeRate_Estimate)%>%
+  dplyr::select(Systematic,ChangeRate_Estimate,ChangeRate_QValue
+    ,ChangeRate_StandardError
+    ,InitialFitRateOfAbundanceDecay
+    ,TotalRateOfDecayUponUpshift
+    ,eitherNCR,NCR,ProbableNCR,Class
+    ,BasalRate_Estimate,BasalRate_QValue,BasalRate_StandardError)%>%
+  ungroup()
+tmp <- left_join(tmp
+  ,modelz%>%map(function(x){ summary(x)$adj.r.squared})%>%
+    tibble(Systematic=names(.),AdjRsquared=unlist(.))%>%dplyr::select(-`.`)
+  ,by="Systematic")
+dme211decayvsdynamics <- tmp
+```
+
+```{r}
+save(dme211decayvsdynamics,file="../tmp/dme211decayvsdynamics.RData")
+```
+
+Here's the comparison of abundance changes to degradation rates,
+in a scatter plot. 
+
+```{r,ex,cache=T}
+
+varnames <- c(`BasalRate_Estimate`="Basal rate,\nupon mock upshift (adding water)",
+  `ChangeRate_Estimate`="The change in rates between\nmock and glutamine upshift",
+  `TotalRateOfDecayUponUpshift`="Final rate,\nafter addition of glutamine")
+
+g <- dme211decayvsdynamics %>%
+  gather(variable,value,ChangeRate_Estimate,BasalRate_Estimate
+    ,TotalRateOfDecayUponUpshift)%>%
+  ggplot()+theme_bw()+
+  facet_wrap(~variable,ncol=1,labeller=as_labeller(varnames))+
+  theme(legend.position="bottom")+
+  geom_vline(xintercept=0,col="gray",size=1)+
+  geom_hline(yintercept=0,col="gray",size=1)+
+  geom_abline(slope=-1,intercept=0,linetype="dashed")+
+  annotate(geom="text",angle=00,label="1:1 line",x=-.18,y=.10)+
+  geom_point(size=1.0,
+    aes(x=-value,y=-InitialFitRateOfAbundanceDecay,col=Class,alpha=!(Class=="NoChange")))+
+  ylab(expression(paste("mRNA abundance change rate (",min^-1,")")))+
+  xlab(expression(paste("Degradation rate (",min^-1,")")))+
+  scale_color_manual("",labels=c(
+      `Destabilized`="Destabilized"
+      ,`NoChange`="No significant change")
+    ,values=c( `Destabilized`="red", `NoChange`="grey50" ))+
+  scale_alpha_discrete(range=c(0.2,1))+
+  coord_cartesian(xlim=c(-0.3,0.4))+
+  guides(col=guide_legend(ncol=1),alpha=F)
+g
+```
+```{r,supGlobalComparisons}
+
+ggsave("../output/Figure2_S_globalComparisons.un.tiff"
+  ,g,width=5,height=5)
+
+```
+
+```{r,correlate}
+dme211decayvsdynamics%>%
+  {cor.test(.$TotalRateOfDecayUponUpshift,.$InitialFitRateOfAbundanceDecay)}
+dme211decayvsdynamics%>%
+  {cor.test(.$ChangeRate_Estimate,.$InitialFitRateOfAbundanceDecay)}
+```
+
+# Categorical comparisons
+
+## GO, KEGG terms
+
+Now, GO and KEGG terms for the set of destabilized ones
+using `clusterProfiler`. We get each ontology and then KEGG,
+looking at just the significantly destabilized mRNAs.
+
+```{r,tryingClusterProfilerz,cache=T}
+library(clusterProfiler)
+library(org.Sc.sgd.db)
+
+AccelDegEntrezIDs <- resultTable%>%filter(Called=="AccelDeg")%>%
+  mutate(SGD=renameSystematicToSGDID[Systematic])%>%pull(SGD)%>%
+  bitr(.,fromType="SGD",toType="ENTREZID"
+    ,OrgDb=org.Sc.sgd.db,drop=T) %>%
+  pull(ENTREZID)
+
+BackgroundEntrezIDs <- resultTable%>%
+  mutate(SGD=renameSystematicToSGDID[Systematic])%>%pull(SGD)%>%
+  bitr(.,fromType="SGD",toType="ENTREZID"
+    ,OrgDb=org.Sc.sgd.db,drop=T) %>%
+  pull(ENTREZID)
+
+CategoricalGO_MF <- enrichGO(gene=AccelDegEntrezIDs
+  ,universe=BackgroundEntrezIDs
+  ,OrgDb=org.Sc.sgd.db
+  ,ont="MF"#MF BP CC all
+  ,pAdjustMethod="fdr"
+  ,pvalueCutoff=0.05
+  ,qvalueCutoff=0.05
+  ,minGSSize=2,maxGSSize=500)
+
+CategoricalGO_BP <- enrichGO(gene=AccelDegEntrezIDs
+  ,universe=BackgroundEntrezIDs
+  ,OrgDb=org.Sc.sgd.db
+  ,ont="BP"#MF BP CC all
+  ,pAdjustMethod="fdr"
+  ,pvalueCutoff=0.05
+  ,qvalueCutoff=0.05
+  ,minGSSize=2,maxGSSize=500)
+
+CategoricalGO_CC <- enrichGO(gene=AccelDegEntrezIDs
+  ,universe=BackgroundEntrezIDs
+  ,OrgDb=org.Sc.sgd.db
+  ,ont="CC"#MF BP CC all
+  ,pAdjustMethod="fdr"
+  ,pvalueCutoff=0.05
+  ,qvalueCutoff=0.05
+  ,minGSSize=2,maxGSSize=500)
+
+CategoricalKEGG <- resultTable%>%filter(Called=="AccelDeg")%>%
+  pull(Systematic)%>%
+  enrichKEGG(gene=.
+    ,organism="sce"
+    ,pvalueCutoff=0.05
+    ,pAdjustMethod="fdr"
+    )
+
+CategoricalGO_MF@result[["Commons"]] <- CategoricalGO_MF@result %>% 
+  as_tibble %>% pull(geneID)%>%lapply(.,str_split,"/")%>%
+  {lapply(.,function(x){bitr(x[[1]],fromType="ENTREZID"
+      ,toType="SGD",OrgDb=org.Sc.sgd.db)$SGD})} %>%
+  lapply(.,function(x){vapply(x,sgdToCommon,FUN.VALUE="a")}) %>%
+  map(.,str_c,collapse=",") 
+CategoricalGO_BP@result[["Commons"]] <- CategoricalGO_BP@result %>% 
+  as_tibble %>% pull(geneID)%>%lapply(.,str_split,"/")%>%
+  {lapply(.,function(x){bitr(x[[1]],fromType="ENTREZID"
+      ,toType="SGD",OrgDb=org.Sc.sgd.db)$SGD})}%>%
+  lapply(.,function(x){vapply(x,sgdToCommon,FUN.VALUE="a")}) %>%
+  map(.,str_c,collapse=",") 
+CategoricalGO_CC@result[["Commons"]] <- CategoricalGO_CC@result %>% 
+  as_tibble %>% pull(geneID)%>%lapply(.,str_split,"/")%>%
+  {lapply(.,function(x){bitr(x[[1]],fromType="ENTREZID"
+      ,toType="SGD",OrgDb=org.Sc.sgd.db)$SGD})}%>%
+  lapply(.,function(x){vapply(x,sgdToCommon,FUN.VALUE="a")}) %>%
+  map(.,str_c,collapse=",") 
+CategoricalKEGG@result[["Commons"]] <- CategoricalKEGG@result %>% 
+  as_tibble %>% pull(geneID)%>%lapply(.,str_split,"/") %>%
+  lapply(.,function(x){vapply(x[[1]],sysToSGD,FUN.VALUE="a")}) %>%
+  lapply(.,function(x){vapply(x,sgdToCommon,FUN.VALUE="a")}) %>%
+  map(.,str_c,collapse=",") 
+
+knitr::kable(
+  simplify(CategoricalGO_MF,cutoff=0.7,by="p.adjust")@result[
+    c("p.adjust","GeneRatio","BgRatio","Description","Commons")]
+  )
+knitr::kable(
+  simplify(CategoricalGO_BP,cutoff=0.7,by="p.adjust")@result[
+    c("p.adjust","GeneRatio","BgRatio","Description","Commons")]
+  )
+knitr::kable(
+  simplify(CategoricalGO_CC,cutoff=0.7,by="p.adjust")@result[
+    c("p.adjust","GeneRatio","BgRatio","Description","Commons")]
+  )
+knitr::kable(
+  CategoricalKEGG@result[
+    c("p.adjust","GeneRatio","BgRatio","Description","Commons")]
+  )
+```
+
+```{r}
+
+write_lines("#
+# Supplementary Table
+#
+# Results of gene set enrichment analysis of genes for which we 
+# detect a significant destabilization of their mRNA upon a nitrogen
+# upshift. This file is using the model-based normalization, ie the
+# main normalization.
+#
+# Key:
+# Term ID , Category of enrichment and type , term , FDR adjusted q-value , ratio of genes in set of query set , background ratio of set against all genes , common names of genes associated"
+  ,path="../output/Figure2_Table_AcceleratedDegradationTranscripts_EnrichedGOandKEGGterms.csv")
+bind_rows(
+  CategoricalGO_MF@result%>%mutate(Category="GO_MolecularFunction")%>%
+    dplyr::select(ID,Category,Description,qvalue,GeneRatio,BgRatio,Commons)%>%
+    rowwise()%>%
+    mutate(Commons=unlist(map(Commons,str_c,collapse=",")))
+  ,CategoricalGO_BP@result%>%mutate(Category="GO_BiologicalProcess")%>%
+    dplyr::select(ID,Category,Description,qvalue,GeneRatio,BgRatio,Commons)%>%
+    rowwise()%>%
+    mutate(Commons=unlist(map(Commons,str_c,collapse=",")))
+  ,CategoricalGO_CC@result%>%mutate(Category="GO_CellularComponent")%>%
+    dplyr::select(ID,Category,Description,qvalue,GeneRatio,BgRatio,Commons)%>%
+    rowwise()%>%
+    mutate(Commons=unlist(map(Commons,str_c,collapse=",")))
+  ,CategoricalKEGG@result%>%mutate(Category="KEGG")%>%
+    dplyr::select(ID,Category,Description,qvalue,GeneRatio,BgRatio,Commons)%>%
+    rowwise()%>%
+    mutate(Commons=unlist(map(Commons,str_c,collapse=",")))
+  ) %>% as_tibble %>% 
+  write_csv(x=.
+    ,path="../output/Figure2_Table_AcceleratedDegradationTranscripts_EnrichedGOandKEGGterms.csv"
+    ,append=T
+    )
+
+```
+
+Now just looking at the direct normalization:
+
+```{r,gseOfDirect,cache=T}
+
+AccelDegEntrezIDs <- resultTableDirect%>%filter(Called=="AccelDeg")%>%
+  mutate(SGD=renameSystematicToSGDID[Systematic])%>%pull(SGD)%>%
+  bitr(.,fromType="SGD",toType="ENTREZID"
+    ,OrgDb=org.Sc.sgd.db,drop=T) %>%
+  pull(ENTREZID)
+
+BackgroundEntrezIDs <- resultTableDirect%>%
+  mutate(SGD=renameSystematicToSGDID[Systematic])%>%pull(SGD)%>%
+  bitr(.,fromType="SGD",toType="ENTREZID"
+    ,OrgDb=org.Sc.sgd.db,drop=T) %>%
+  pull(ENTREZID)
+
+CategoricalGO_MF <- enrichGO(gene=AccelDegEntrezIDs
+  ,universe=BackgroundEntrezIDs
+  ,OrgDb=org.Sc.sgd.db
+  ,ont="MF"#MF BP CC all
+  ,pAdjustMethod="fdr"
+  ,pvalueCutoff=0.01
+  ,qvalueCutoff=0.05
+  ,minGSSize=2,maxGSSize=500)
+
+CategoricalGO_BP <- enrichGO(gene=AccelDegEntrezIDs
+  ,universe=BackgroundEntrezIDs
+  ,OrgDb=org.Sc.sgd.db
+  ,ont="BP"#MF BP CC all
+  ,pAdjustMethod="fdr"
+  ,pvalueCutoff=0.01
+  ,qvalueCutoff=0.05
+  ,minGSSize=2,maxGSSize=500)
+
+CategoricalGO_CC <- enrichGO(gene=AccelDegEntrezIDs
+  ,universe=BackgroundEntrezIDs
+  ,OrgDb=org.Sc.sgd.db
+  ,ont="CC"#MF BP CC all
+  ,pAdjustMethod="fdr"
+  ,pvalueCutoff=0.01
+  ,qvalueCutoff=0.05
+  ,minGSSize=2,maxGSSize=500)
+
+CategoricalKEGG <- resultTableDirect%>%filter(Called=="AccelDeg")%>%
+  pull(Systematic)%>%
+  enrichKEGG(gene=.
+    ,organism="sce"
+    ,pvalueCutoff=0.05
+    ,pAdjustMethod="fdr"
+    )
+
+CategoricalGO_MF@result[["Commons"]] <- CategoricalGO_MF@result %>% 
+  as_tibble %>% pull(geneID)%>%lapply(.,str_split,"/")%>%
+  {lapply(.,function(x){bitr(x[[1]],fromType="ENTREZID"
+      ,toType="SGD",OrgDb=org.Sc.sgd.db)$SGD})} %>%
+  lapply(.,function(x){vapply(x,sgdToCommon,FUN.VALUE="a")}) %>%
+  map(.,str_c,collapse=",") 
+CategoricalGO_BP@result[["Commons"]] <- CategoricalGO_BP@result %>% 
+  as_tibble %>% pull(geneID)%>%lapply(.,str_split,"/")%>%
+  {lapply(.,function(x){bitr(x[[1]],fromType="ENTREZID"
+      ,toType="SGD",OrgDb=org.Sc.sgd.db)$SGD})}%>%
+  lapply(.,function(x){vapply(x,sgdToCommon,FUN.VALUE="a")}) %>%
+  map(.,str_c,collapse=",") 
+CategoricalGO_CC@result[["Commons"]] <- CategoricalGO_CC@result %>% 
+  as_tibble %>% pull(geneID)%>%lapply(.,str_split,"/")%>%
+  {lapply(.,function(x){bitr(x[[1]],fromType="ENTREZID"
+      ,toType="SGD",OrgDb=org.Sc.sgd.db)$SGD})}%>%
+  lapply(.,function(x){vapply(x,sgdToCommon,FUN.VALUE="a")}) %>%
+  map(.,str_c,collapse=",") 
+CategoricalKEGG@result[["Commons"]] <- CategoricalKEGG@result %>% 
+  as_tibble %>% pull(geneID)%>%lapply(.,str_split,"/") %>%
+  lapply(.,function(x){vapply(x[[1]],sysToSGD,FUN.VALUE="a")}) %>%
+  lapply(.,function(x){vapply(x,sgdToCommon,FUN.VALUE="a")}) %>%
+  map(.,str_c,collapse=",") 
+
+knitr::kable(
+  simplify(CategoricalGO_MF,cutoff=0.7,by="p.adjust")@result[
+    c("p.adjust","GeneRatio","BgRatio","Description","Commons")]
+  )
+knitr::kable(
+  simplify(CategoricalGO_BP,cutoff=0.7,by="p.adjust")@result[
+    c("p.adjust","GeneRatio","BgRatio","Description","Commons")]
+  )
+knitr::kable(
+  simplify(CategoricalGO_CC,cutoff=0.7,by="p.adjust")@result[
+    c("p.adjust","GeneRatio","BgRatio","Description","Commons")]
+  )
+
+knitr::kable(
+  CategoricalKEGG@result[
+    c("p.adjust","GeneRatio","BgRatio","Description","geneID")]
+  )
+```
+
+```{r}
+write_lines("#
+# Supplementary Table
+#
+# Results of gene set enrichment analysis of genes for which we 
+# detect a significant destabilization of their mRNA upon a nitrogen
+# upshift. This file is using the direct normalization on a subset
+# of samples, so not spike-in proportions are not smoothed across
+# timepoints.
+#
+# Key:
+# Term ID , Category of enrichment and type , term , FDR adjusted q-value , ratio of genes in set of query set , background ratio of set against all genes , common names of genes associated"
+  ,path="../output/Figure2_Table_AcceleratedDegradationTranscriptsDirectNormalization_EnrichedGOandKEGGterms.csv")
+bind_rows(
+#  CategoricalGO_MF@result%>%mutate(Category="GO_MolecularFunction")%>%
+#    dplyr::select(ID,Category,Description,qvalue,GeneRatio,BgRatio,Commons)%>%
+#    rowwise()%>%
+#    mutate(Commons=unlist(map(Commons,str_c,collapse=",")))
+#  , #commented out because it stalls here with no enrichment
+  CategoricalGO_BP@result%>%mutate(Category="GO_BiologicalProcess")%>%
+    dplyr::select(ID,Category,Description,qvalue,GeneRatio,BgRatio,Commons)%>%
+    rowwise()%>%
+    mutate(Commons=unlist(map(Commons,str_c,collapse=",")))
+  ,CategoricalGO_CC@result%>%mutate(Category="GO_CellularComponent")%>%
+    dplyr::select(ID,Category,Description,qvalue,GeneRatio,BgRatio,Commons)%>%
+    rowwise()%>%
+    mutate(Commons=unlist(map(Commons,str_c,collapse=",")))
+  ,CategoricalKEGG@result%>%mutate(Category="KEGG")%>%
+    dplyr::select(ID,Category,Description,qvalue,GeneRatio,BgRatio,Commons)%>%
+    rowwise()%>%
+    mutate(Commons=unlist(map(Commons,str_c,collapse=",")))
+  ) %>% as_tibble  %>% 
+  write_csv(x=.
+    ,path="../output/Figure2_Table_AcceleratedDegradationTranscriptsDirectNormalization_EnrichedGOandKEGGterms.csv"
+    ,append=T
+    )
+
+```
+
+That's what we see. Note that we've collapsed them a bit using
+the `simplify` function, so simplifying on semantic similarities.
+
+
+## NCR
+
+Here, I want to compare it to NCR. For that, I read in the 
+Godard 2007 definitions, and then tabulate the overlap with the
+"probable" and definitely NCR categories. For the enrichment, I
+compare this data to both categories with a hypergeometric test.
+
+
+```{r,ncrStats}
+table(compNCR$Called,compNCR$NCR)[-3,]
+chisq.test(table(compNCR$Called,compNCR$NCR)[-3,],simulate.p.value=T)
+
+table(compNCR$Called,compNCR$ProbableNCR)[-3,]
+chisq.test(table(compNCR$Called,compNCR$ProbableNCR)[-3,],simulate.p.value=T)
+
+table(compNCR$Called,compNCR$anyNCR)
+chisq.test(table(compNCR$Called,compNCR$anyNCR)[-3,],simulate.p.value=T)
+phyper(q=16-1,m=16+22+39,n=3544+22+1176+39,k=62+16,lower.tail=F)
+```
+
+## Mitchell 2013 data
+
+Looking at the Mitchell 2013 data, so mRNA pulled down by CLIP
+to determine association with Pat1 or Dhh1.
+
+```{r}
+
+mitchellCLIP <- bind_rows(
+    read_csv("../data/mitchell2013suppTable3Tier1.csv")%>%
+      gather(Variable,Value)
+    ,read_csv("../data/mitchell2013suppTable3Tier2.csv")%>%
+      gather(Variable,Value)
+    ) %>%
+  separate(Variable,sep=4,into=c("Pulldown","Tier"))%>%
+  mutate(Tier=str_replace_all(Tier," ",""))
+
+z <- full_join(resultTable
+    ,mitchellCLIP%>%dplyr::rename(Systematic=Value)
+    ,by="Systematic")
+
+z%>%
+  ggplot()+aes(x=ChangeRate_Estimate)+geom_histogram(bins=100)+
+  facet_wrap(~Pulldown+Tier)
+```
+
+Huh, no real relation there.
+
+## Jan and Williams 2014 localization data
+
+Say, any relationship with localization? Here I read in the
+Jan and Williams science paper suppements, and look at some of
+the categories. This is not looking at statistical enrichment,
+I'm trying to see if anything really pops out.
+
+Only one thing does - length (that's X3 below).
+
+```{r}
+
+willy <- left_join(resultTable
+  ,read_delim("../data/williams2014localizationAnnotation.txt","\t",comment="#",col_names=F)%>%
+    dplyr::select(X1,X2,X3,X4,X5,X7,X9,X10,X11,X13,X14)%>%
+    unite(Mitop2,X4,X5)%>%dplyr::rename(Systematic=X1)
+  ,by="Systematic") 
+
+jan <- left_join(resultTable
+  ,read_delim("../data/jan2014moreAnnotation.txt","\t",comment="#",col_names=F)%>%
+    dplyr::select(X1,X2,X3,X4,X7,X8,X9,X10,X12,X14,X16,X17,X18,X19)%>%
+    dplyr::rename(Systematic=X1)
+  ,by="Systematic")
+
+willy%>%group_by(Class)%>%dplyr::summarize(str_c(summary(X3),collapse=", "))%>%data.frame 
+# This is aa length.
+
+willy%>%ungroup%>%dplyr::select(Class,X3)%>%{aov(data=.,formula=X3~Class)}%>%summary
+
+willy%>%ggplot()+aes(x=Class,y=X3)+geom_dotplot(binaxis="y",binwidth=5)
+
+willy%>%ggplot()+aes(x=as.logical(Class!="AccelDeg"),y=X3)+geom_boxplot()+scale_y_log10()
+```
+
+So, significantly longer in the destabilized set. 
+Will return to this in the sequence analysis
+
+## Comparing to Brauer 2008 and Gasch 2000
+
+Here I'm just using the supplemental from Brauer 2008, as I can't
+find a list of ESR up and down genes in the web supplement from
+Gasch 2000.
+
+```{r,brauer,cache=T}
+brauer <- read_csv("../data/brauer2008tableS1.csv") %>%
+  mutate(Systematic=ORF) %>% 
+  dplyr::select(`Growth Rate Slope`,`Bootstrapped p-value of slope`
+    ,ESR,Systematic) %>%
+  inner_join(
+    dme211decayvsdynamics
+    ,by="Systematic") 
+
+brauer%>%dplyr::group_by(Class)%>%
+  dplyr::summarize(list(data.frame(count=table(ESR,useNA="ifany"))))%>%
+  unnest
+
+g <- brauer %>%
+  mutate(ESR=ifelse(is.na(ESR),"neither",ESR))%>%
+  mutate(ESR=str_c("ESR ",ESR))%>%
+  mutate(PlotClass=ifelse(Class=="Destabilized",str_c(Class,", ",ESR),"No change"))%>%
+  dplyr::arrange(dplyr::desc(Class))%>%
+  ggplot()+theme_bw()+
+  theme(legend.position="bottom")+
+  geom_vline(xintercept=0,col="gray",size=1)+
+  geom_hline(yintercept=0,col="gray",size=1)+
+#  geom_abline(slope=1,intercept=0,linetype="dashed")+
+#  annotate(geom="text",angle=00,label="1:1 line",x=.18,y=.10)+
+  geom_point(size=1.0,
+    aes(x=-TotalRateOfDecayUponUpshift
+      ,y=-InitialFitRateOfAbundanceDecay
+      ,col=PlotClass
+      ,alpha=(Class=="Destabilized")
+      ))+
+  ylab(expression(paste("mRNA abundance change rate (",min^-1,")")))+
+  xlab(expression(paste("Estimated degradation rate upon upshift (",min^-1,")")))+
+  scale_color_manual(""
+    ,values=c(
+      `Destabilized, ESR down`="green"
+      ,`Destabilized, ESR neither`="purple"
+      ,`Destabilized, ESR up`="red"
+      ,`No change`="grey50" 
+      )
+    ,labels=c(
+      `Destabilized, ESR down`='Destabilized, ESR down'
+      ,`Destabilized, ESR neither`='Destabilized, not ESR'
+      ,`Destabilized, ESR up`='Destabilized, ESR up'
+      ,`No change`='Not significant'
+    ))+
+  scale_alpha_discrete(range=c(0.2,1))+
+  coord_cartesian(xlim=c(-0.2,0.4))+
+  guides(col=guide_legend(ncol=2),alpha=F)
+g
+```
+
+```{r,esrComparison}
+ggsave("../output/Figure2_S_comparisonToESR.un.tiff"
+  ,g,width=4,height=4)
+```
+
+Huh. So of the 76 overlapping between the Brauer 2008 supplementary
+table and the destabilized set of 78, 37 are ESR "up" genes.
+But theyre not all clustered to one side. The most extreme
+repression and slight repression are not part of this set.
+
+```{r,khong}
+khong <- read_csv("../data/khong2017sup2yeastSGtxtome.csv")%>%
+  mutate(Systematic=gene_ID) %>% 
+  inner_join(
+    dme211decayvsdynamics
+    ,by="Systematic")%>%
+  filter(`codon optimality`!="#N/A")
+
+khong %>% ggplot()+aes(x=Class,y=`5\' UTR length`)+geom_boxplot()+scale_y_log10()
+khong %>% ggplot()+aes(x=Class,y=as.numeric(`codon optimality`))+geom_boxplot()+scale_y_log10(breaks=seq(0.1,1,0.1))
+khong %>% ggplot()+aes(x=Class,y=as.numeric(`initiation rate`))+geom_boxplot()+scale_y_log10()
+khong %>% ggplot()+aes(x=Class,y=as.numeric(`ribosome density`))+geom_boxplot()+scale_y_log10()
+khong %>% ggplot()+aes(x=Class,y=as.numeric(`fraction GC content`))+geom_boxplot()+scale_y_log10(breaks=seq(0.1,1,0.05))
+
+codonz <- khong %>% ggplot()+
+  aes(x=Class!="Destabilized",y=as.numeric(`codon optimality`))+theme_bw()+
+  geom_boxplot(width=0.5)+scale_y_continuous(breaks=seq(0,1,0.1))+
+  scale_x_discrete(labels=c(`TRUE`="Not destabilized",`FALSE`="Destabilized"))+
+  ylab("Fraction of optimal codons")+#,\ncalculated by Khong and Matheny et. al. 2017\n from Presnyack et al 2016 classifications")+
+  xlab("")
+codonz
+
+wilcox.test(
+  khong%>%filter(Class=="Destabilized")%>%pull(`codon optimality`)%>%na.omit()%>%as.numeric()
+  ,khong%>%filter(Class!="Destabilized")%>%pull(`codon optimality`)%>%na.omit()%>%as.numeric()
+  )
+
+```
+
+What to make of that?
+
+# Looking at sequence based cis-elements
+
+In this section, I'm going to partition out some of the sets of
+transcripts to try and see if there's cis-elements that explain
+some of the differences.
+
+## What are my sets of transcripts to compare?
+
+This was defined as the Class variable earlier. There's three
+classes, the `AccelDeg` set of destabilized mRNA, then the
+`NotSignificant` for those that don't pass the cutoff, then
+`NoChange` for ones that are of low estimated effect and really
+no significant change.
+
+```{r,grabAndExportCalls,cache=T}
+resultTable%>%
+  group_by(Class)%>%
+  dplyr::summarize(AllSystematics=list(c(Systematic)))%>%
+  group_by(Class)%>%
+  {walk2(.$Class,.$AllSystematics,function(x,y){
+      write_lines(x=str_c(y,"")
+        ,path=str_c("../tmp/dme211_systematicnames_",x,".txt")
+        )
+      }
+    )}
+```
+
+## What sequences to analyze?
+
+I want to analyze
+
+- 5' leader : furthest 5' transcribed to start codon
+- CDS : coding sequence, start to stop codon as annotated by SGD
+- 3' UTR : stop codon to furthest 3' transcribed
+
+<!--- ' --->
+
+### Defining BEDs for subsetting out three chunks
+
+And here I define a bed file of CDSs, then a bed file of
+CDS to cut
+out, this is to subtract out the middle. Then I sum up the genome
+sizes for bedtools to use, then I calculate CDS sizes for the
+transcripts.
+
+```{r,bedsToCompareTo,cache=T}
+read_tsv("../data/sgd_171019.gff"
+    ,comment="#",col_names=F)%>%
+  filter(X3=="mRNA")%>%mutate(X4=X4,X5=X5)%>%
+  mutate(name=sub(".*Name=([^;_]+)_mRNA.*","\\1",X9),score=0)%>%
+  filter(X5>X4) %>%
+  dplyr::select(X1,X4,X5,name,score,X7)%>%
+  mutate(X4=as.character(as.numeric(X4)),X5=as.character(as.numeric(X5)))%>%
+  write_tsv("../tmp/CDS.bed",col_names=F)
+
+read_tsv("../data/sgd_171019.gff"
+    ,comment="#",col_names=F)%>%
+  filter(X3=="mRNA")%>%mutate(X4=X4+0,X5=X5-0)%>%
+  mutate(name=sub(".*Name=([^;_]+)_mRNA.*","\\1",X9),score=0)%>%
+  filter(X5>X4) %>%
+  dplyr::select(X1,X4,X5,name,score,X7)%>%
+  mutate(X4=as.character(as.numeric(X4)),X5=as.character(as.numeric(X5)))%>%
+  write_tsv("../tmp/trimmedmRNA.bed",col_names=F)
+
+genomeSize <- read_tsv("../data/sgd_171019.gff",comment="#",col_names=F)%>%
+  filter(X3=="chromosome")%>%dplyr::select(X1,X5)
+genomeSize%>%
+  write_tsv("../tmp/genomeSize.tsv",col_names=F) 
+
+z <- left_join(resultTable
+  ,read_tsv("../data/sgd_171019.gff",comment="#",col_names=F) %>%
+    filter(X3=="mRNA")%>%mutate(CDSLength=X5-X4)%>%
+    mutate(name=sub(".*Name=([^;_]+)_mRNA.*","\\1",X9),score=0)%>%
+    dplyr::select(Systematic=name,CDSLength)
+  ,by="Systematic")%>% #group_by(Class)%>%dplyr::select(CDSLength)
+  filter(!is.na(CDSLength))
+
+z%>%filter(Class=="AccelDeg")%>%pull(CDSLength)%>%summary()
+z%>%filter(Class!="AccelDeg")%>%pull(CDSLength)%>%summary()
+
+t.test(
+  z%>%filter(Class=="AccelDeg")%>%pull(CDSLength)
+  ,z%>%filter(Class!="AccelDeg")%>%pull(CDSLength)
+  )
+
+t.test(
+  z%>%filter(Class=="AccelDeg")%>%pull(CDSLength)%>%log
+  ,z%>%filter(Class!="AccelDeg")%>%pull(CDSLength)%>%log
+  )
+
+wilcox.test(
+  z%>%filter(Class=="AccelDeg")%>%pull(CDSLength)
+  ,z%>%filter(Class!="AccelDeg")%>%pull(CDSLength)
+  )
+```
+
+So it appears that the coding sequence of the destabilized set
+is significantly longer, logged or not, or by wilcoxon.
+
+```{r,suppPlotCDSGC}
+lengthz <- z %>% ggplot()+
+  aes(x=Class!="AccelDeg",y=CDSLength)+theme_bw()+
+  scale_x_discrete(labels=c(`TRUE`="Not destabilized",`FALSE`="Destabilized"))+
+  geom_boxplot()+scale_y_log10()+
+  ylab("CDS length (bp)")+#,\nfrom SGD GFF")+
+  xlab("")
+lengthz
+
+g <- cowplot::plot_grid(lengthz,codonz,labels=c("A","B")) 
+g
+
+ggsave("../output/Figure2_S_lengthAndCodons.un.tiff"
+  ,g,width=6,height=4)
+
+```
+
+Next, I need to identify the UTR regions by identifying the extrema.
+I'm going to do that in four ways, named thusly:
+
+<!--- ' --->
+
+- fixed : 200 bases up and down, a fixed definition
+- pelechano : the most extreme transcript end identified in the
+  Pelechano 2014 TIF seq dataset
+- freebergW : the "wild-type" media gPAR-CLIP binding site dataset
+  from Freeberg and Han 2013, most extreme ends
+- freebergW : the nitrogen-limited media gPAR-CLIP binding site 
+  dataset from Freeberg and Han 2013, most extreme ends
+
+1) fixed
+
+```{r,mRNA_fixed,cache=T}
+read_tsv("../data/sgd_171019.gff"
+    ,comment="#",col_names=F)%>%
+  filter(X3=="mRNA")%>%mutate(X4=X4-200,X5=X5+200)%>%
+  left_join(genomeSize%>%dplyr::rename(ChrEnd=X5),by="X1")%>%
+  mutate(X4=ifelse(X4<1,1,X4),X5=ifelse(X5>ChrEnd,ChrEnd,X5))%>%
+  mutate(name=sub(".*Name=([^;_]+)_mRNA.*","\\1",X9),score=0)%>%
+  filter(X5>X4,X1!="chrmt") %>%
+  dplyr::select(X1,X4,X5,name,score,X7)%>%
+  mutate(X4=as.character(as.numeric(X4)),X5=as.character(as.numeric(X5)))%>%
+  write_tsv("../tmp/mRNA_fixed.bed",col_names=F)
+```
+
+2) pelechano
+
+```{r,mRNA_pelechano,cache=T}
+parseRawTIFz <- function(x){
+  y <- unlist(str_split(x," ",n=7))
+  y[length(y)+1] <- sub(".+ (\\S+)$","\\1",y[length(y)])
+  y[length(y)-1] <- sub(" \\S+$","",y[length(y)-1])
+  as_tibble(t(y))
+}
+pelechano2013tifz <- readLines("../data/pelechano2013S1tifs.txt") %>%
+  map(.,parseRawTIFz)%>%bind_rows()
+names(pelechano2013tifz) <- pelechano2013tifz[1,]
+pelechano2013tifz <- pelechano2013tifz[-1,]
+
+table(pelechano2013tifz$type)
+
+pelechano2013tifzBoundaries <- left_join(
+    resultTable%>%ungroup()%>%dplyr::rename(name=Systematic)
+      %>%dplyr::select(name)
+    ,pelechano2013tifz
+    ,by="name") %>%
+  filter(type=="Covering one intact ORF")%>%
+  mutate(ypd=as.numeric(ypd),gal=as.numeric(gal)
+    ,t5=as.numeric(t5),t3=as.numeric(t3))%>%
+  group_by(chr,strand,name)%>%
+  dplyr::summarize(
+    fivePrime=ifelse(unique(strand=="+"),min(t5),max(t5))
+    ,threePrime=ifelse(unique(strand=="+"),max(t3),min(t3))
+    )%>%
+  mutate(chr=str_c("chr"
+      ,c("I","II","III","IV","V","VI","VII","VIII","IX","X"
+        ,"XI","XII","XIII","XIV","XV","XVI")[as.numeric(chr)]
+      )
+    )%>%arrange(name)%>%
+  mutate(
+    low=ifelse(strand=="+",fivePrime,threePrime)
+    ,high=ifelse(strand=="+",threePrime,fivePrime)
+  )
+pelechano2013tifzBoundaries
+
+pelechano2013tifzBoundaries %>% mutate(score=0)%>%
+  dplyr::select(chr,low,high,name,score,strand)%>%
+  mutate(low=as.character(as.numeric(low)),high=as.character(as.numeric(high)))%>%
+  write_tsv("../tmp/mRNA_pelechano.bed",col_names=F)
+
+rm(pelechano2013tifz)
+```
+
+3) and 4) freeberg
+
+```{r,mRNA_freeberg,cache=T,warning=F,error=F}
+freeberg <- read_csv("../data/freeberg2014table10.csv"
+    ,col_types=cols("c","i","c","c","c","d","d","d")) %>%
+  mutate(WT=CLS_WT>0,N=CLS_minusNitrogen>0)%>%group_by(gene) %>%
+  filter(chr!="mt")%>%
+  dplyr::do( {
+    strand <- unique(.$strand); 
+    Nrange <- base::range(as.numeric(subset(.,N)$pos)); 
+    WTrange <- base::range(as.numeric(subset(.,WT)$pos)); 
+    data.frame(
+      chr=str_c("chr"
+        ,c("I","II","III","IV","V","VI","VII","VIII","IX","X"
+          ,"XI","XII","XIII","XIV","XV","XVI")[as.numeric(unique(.$chr))])
+      ,strand=strand
+      ,Nlow=Nrange[1]
+      ,Nhigh=Nrange[2]
+      ,Wlow=WTrange[1]
+      ,Whigh=WTrange[2]) } ) %>% 
+  gather(Variable,Value,Nlow,Nhigh,Wlow,Whigh)%>%
+  separate(Variable,sep=1,into=c("Condition","End")) %>% 
+  spread(End,Value)%>%
+  filter(is.finite(low),is.finite(high)) %>% mutate(score=0)%>%
+  dplyr::select(chr,low,high,gene,score,strand,Condition)
+```
+
+```{r,mRNA_freeberg_write,cache=T,warning=F,error=F}
+freeberg %>% group_by(Condition) %>%
+  arrange(chr,low)%>%
+  mutate(low=as.character(as.numeric(low)),high=as.character(as.numeric(high)))%>%
+  dplyr::do({
+    write_tsv(.[,-7]
+      ,str_c("../tmp/mRNA_freeberg",unique(.$Condition),".bed")
+      ,col_names=F)
+    data.frame()
+    })
+```
+
+Here we subtract out the beds.
+
+```{bash,usingBedtoolBecauseBioconductorIsWeird,cache=T,dependson="bedsToCompareTo",dependson="mRNA_pelechano",dependson="mRNA_freeberg_write"}
+
+bedtools subtract -s -a ../tmp/mRNA_fixed.bed \
+  -b ../tmp/trimmedmRNA.bed > ../tmp/withoutCDS_fixed.bed
+
+bedtools subtract -s -a ../tmp/mRNA_pelechano.bed \
+  -b ../tmp/trimmedmRNA.bed > ../tmp/withoutCDS_pelechano.bed
+
+bedtools subtract -s -a ../tmp/mRNA_freebergW.bed \
+  -b ../tmp/trimmedmRNA.bed > ../tmp/withoutCDS_freebergW.bed
+
+bedtools subtract -s -a ../tmp/mRNA_freebergN.bed \
+  -b ../tmp/trimmedmRNA.bed > ../tmp/withoutCDS_freebergN.bed
+```
+
+### Pulling sequences to files
+
+And then we can read them back in as GRanges to pull sequence 
+information.
+
+```{r}
+library(GenomicRanges)
+
+library("BSgenome.Scerevisiae.UCSC.sacCer3")
+```
+
+First, going to write out the CDS's:
+
+```{r,writingCDS,cache=T}
+coords <- read_tsv("../tmp/CDS.bed",col_names=F) %>%
+  mutate(X1=ifelse(X1=="chrmt","chrM",X1))
+coordsGR <- GRanges(
+  seqnames=coords$X1
+  ,ranges=IRanges(names=coords$X4
+    ,start=coords$X2,end=coords$X3
+    )
+  ,strand=coords$X6
+  )
+coords80 <- coords %>% filter(X3-X2>80)
+coords80GR <- GRanges(
+  seqnames=coords80$X1
+  ,ranges=IRanges(names=coords80$X4
+    ,start=coords80$X2,end=coords80$X3
+    )
+  ,strand=coords80$X6
+  )
+writeXStringSet(
+  getSeq(BSgenome.Scerevisiae.UCSC.sacCer3,coordsGR)
+  ,filepath="../tmp/dna_CDS.fa",format="fasta"
+  )
+writeXStringSet(
+  getSeq(BSgenome.Scerevisiae.UCSC.sacCer3,coords80GR)
+  ,filepath="../tmp/dna_CDS80.fa",format="fasta"
+  )
+```
+
+Then we go into each of the previously subtracted bed files, and
+we query the sequence and write the DNA fasta.
+
+```{r,writingUTRs,cache=T,dependson="usingBedtoolBecauseBioconductorIsWeird"}
+pullSeqCoordsUTRs <- function(thisbed) {
+  leaderUTRcoords <- read_tsv(thisbed,col_names=F) %>%
+    dplyr::select(-X5)%>%
+    group_by(X1,X4,X6)%>%nest()%>%
+    mutate(coords=map2(.$data,.$X6,function(x,y){
+            if(y=="+"){
+              fivePrime<-x[x[,1]==min(x[,1]),]
+              threePrime<-x[x[,1]==max(x[,1]),]
+            }else{
+              fivePrime<-x[x[,1]==max(x[,1]),]
+              threePrime<-x[x[,1]==min(x[,1]),]
+            }
+            return(list(fivePrime,threePrime))
+          }
+        )
+      )%>% group_by(X4)%>%
+    mutate(fivePrime=map(coords,function(x){x[[1]]})
+      ,threePrime=map(coords,function(x){x[[2]]})
+      )%>%
+    dplyr::select(-data,-coords)%>%unnest()%>%
+    dplyr::rename(chr=X1,name=X4,strand=X6
+      ,fivePrimeStart=X2,fivePrimeEnd=X3
+      ,threePrimeStart=X21,threePrimeEnd=X31)
+  thisLeaderUTRcoords <- leaderUTRcoords 
+  fiveLeaders <- GRanges(
+    seqnames=thisLeaderUTRcoords$chr
+    ,ranges=IRanges(names=str_c(thisLeaderUTRcoords$name,"")
+     ,start=thisLeaderUTRcoords$fivePrimeStart
+      ,end=thisLeaderUTRcoords$fivePrimeEnd
+      )
+    ,strand=thisLeaderUTRcoords$strand
+    )
+  thisLeaderUTRcoords <- leaderUTRcoords %>% filter(fivePrimeEnd-fivePrimeStart>80)
+  fiveLeaders80 <- GRanges(
+    seqnames=thisLeaderUTRcoords$chr
+    ,ranges=IRanges(names=str_c(thisLeaderUTRcoords$name,"")
+     ,start=thisLeaderUTRcoords$fivePrimeStart
+      ,end=thisLeaderUTRcoords$fivePrimeEnd
+      )
+    ,strand=thisLeaderUTRcoords$strand
+    )
+  thisLeaderUTRcoords <- leaderUTRcoords 
+  threeUTRs <- GRanges(
+    seqnames=thisLeaderUTRcoords$chr
+    ,ranges=IRanges(names=str_c(thisLeaderUTRcoords$name,"")
+     ,start=thisLeaderUTRcoords$threePrimeStart
+      ,end=thisLeaderUTRcoords$threePrimeEnd
+      )
+    ,strand=thisLeaderUTRcoords$strand
+    )
+  thisLeaderUTRcoords <- leaderUTRcoords %>% filter(threePrimeEnd-threePrimeStart>80)
+  threeUTRs80 <- GRanges(
+    seqnames=thisLeaderUTRcoords$chr
+    ,ranges=IRanges(names=str_c(thisLeaderUTRcoords$name,"")
+     ,start=thisLeaderUTRcoords$threePrimeStart
+      ,end=thisLeaderUTRcoords$threePrimeEnd
+      )
+    ,strand=thisLeaderUTRcoords$strand
+    )
+  return(list(
+    five=fiveLeaders,five80=fiveLeaders80
+    ,three=threeUTRs,three80=threeUTRs80
+    ))
+} 
+
+writer <- function(x,thatList,...) {
+  writeXStringSet(
+    getSeq(BSgenome.Scerevisiae.UCSC.sacCer3
+      ,thatList[[x]])
+    ,filepath=str_c("../tmp/dna_",thisone,"_",x,".fa")
+    ,format="fasta")
+}
+
+for (thisone in c("fixed","pelechano","freebergW","freebergN")) {
+  thisList <- pullSeqCoordsUTRs(str_c("../tmp/withoutCDS_",thisone,".bed"))
+  for (j in names(thisList)) {
+    writer(j,thisList)
+  }
+}
+```
+
+```{r,utrlengths,cache=T,dependson="writingUTRs"}
+message("For each: minimum, 1st Q, median, mean, 3rd Q, Max")
+for (thisone in c("pelechano","freebergW","freebergN")) {
+  thisList <- pullSeqCoordsUTRs(str_c("../tmp/withoutCDS_",thisone,".bed"))
+  message(str_c("For ",thisone,"..."))
+  message(str_c("\tAccelDeg seqlengths:"))
+  namez <- intersect(
+    resultTable%>%filter(Class=="AccelDeg")%>%pull(Systematic)
+    ,names(thisList[[1]]))
+  message(str_c("\t\tfive prime: ",str_c(summary(width(thisList[[1]][namez])),collapse=", ")))
+  message(str_c("\tNoCange seqlengths:"))
+  namez <- intersect(
+    resultTable%>%filter(Class=="NoChange")%>%pull(Systematic)
+    ,names(thisList[[1]]))
+  message(str_c("\t\tfive prime: ",str_c(summary(width(thisList[[1]][namez])),collapse=", ")))
+  message(str_c("\tAccelDeg seqlengths:"))
+  namez <- intersect(
+    resultTable%>%filter(Class=="AccelDeg")%>%pull(Systematic)
+    ,names(thisList[[3]]))
+  message(str_c("\t\tthree prime: ",str_c(summary(width(thisList[[3]][namez])),collapse=", ")))
+  message(str_c("\tNoCange seqlengths:"))
+  namez <- intersect(
+    resultTable%>%filter(Class=="NoChange")%>%pull(Systematic)
+    ,names(thisList[[3]]))
+  message(str_c("\t\tthree prime: ",str_c(summary(width(thisList[[3]][namez])),collapse=", ")))
+}
+```
+
+Here we convert them to RNA, ie T -> U so RNAfold don't complain.
+
+```{bash,dnaToRna,cache=T,dependson="writingUTRs"}
+for i in $(echo ../tmp/dna_*.fa); do
+  j=$(echo -n $i | sed 's/dna/rna/g' )
+  cat ${i} | perl -ne 'if (/^>/) {print;} else {s/T/U/g;print;}' > \
+    ${j}
+done
+```
+
+Here we pull out the sequences of each set into different files
+
+```{bash,getSeqz,cache=T,dependson="dnaToRna",dependson="grabAndExportCalls"}
+for i in $(echo ../tmp/rna_*.fa); do
+  j=$(echo -n ${i} | sed 's/rna_/accelDeg_/' )
+  cat ${i} | perl -pe 's/\n/|/g; s/>/\n>/g;' |\
+    grep -f ../tmp/dme211_systematicnames_AccelDeg.txt |\
+    perl -pe 's/\|/\n/g;' > ${j}
+  k=$(echo -n ${i} | sed 's/rna_/noChange_/' )
+  cat ${i} | perl -pe 's/\n/|/g; s/>/\n>/g;' |\
+    grep -f ../tmp/dme211_systematicnames_NoChange.txt |\
+    perl -pe 's/\|/\n/g;' > ${k}
+done
+```
+
+### Applying tools
+
+Here's a few tools that look for explanatory cis-elements that
+distinguish our two sets. 
+
+#### DECOD3
+
+First to bat is DECOD3, this should be looking for new linear motifs
+that are enriched in the set in question.
+
+```{bash,evalDECOD,cache=T,eval=T,DEBUG=F,warning=F,error=F,dependson="getSeqz"}
+for i in $(echo ../tmp/rna_*[^0].fa); do
+  j=$(echo -n ${i} | sed 's/rna_/accelDeg_/' )
+  k=$(echo -n ${i} | sed 's/rna_/noChange_/' )
+  l=$(echo -n ${i} | sed 's/rna_/decod_/' )
+  echo "$l" > ../tmp/decodOutputs.txt
+  java -jar ../scripts/DECOD/DECOD-20111024.jar -nogui \
+    -pos ${j} -neg ${k} -w 7 -strand forward -nmotif 3 -o ${l} >> \
+    ../tmp/decodOutputs.txt
+done
+```
+
+#### AME
+
+Using AME from the MEME suite, I looked for enrichment of known 
+motifs. I used the list of RBP motifs from the CISBP-RNA [^cisbp].
+
+[^cisbp]: Ray D, Kazan H, Cook KB, Weirauch MT, Najafabadi HS, Li X, Gueroussov S, Albu M, Zheng H, Yang A, Na H, Irimia M, Matzat LH, Dale RK, Smith SA, Yarosh CA, Kelly SM, Nabet B, Mecenas D, Li W, Laishram RS, Qiao M, Lipshitz HD, Piano F, Corbett AH, Carstens RP, Frey BJ, Anderson RA, Lynch KW, Penalva LO, Lei EP, Fraser AG, Blencowe BJ, Morris QD, Hughes TR. A compendium of RNA-binding motifs for decoding gene regulation. Nature. 2013 Jul 11;499(7457):172-7. doi: 10.1038/nature12311. PubMed PMID: 23846655.
+
+
+```{bash,makeDankMEMEz,eval=T,cache=T}
+cispb=$(cat ../data/cisbpRNAallYeastDirect.csv | tail -n +2 | cut -d , -f 7 | sed 's/"//g')
+li=$(cat ../data/li2010motifsOfRBPs.csv | tail -n +2 | cut -d , -f 2 )
+
+motifz=$(echo $(echo $cispb $li AUUUA | sed 's/ /\n/g' | uniq ))
+
+iupac2meme -alph ../data/iupacRNAalphabet.meme $motifz > \
+  ../data/allRBP.meme
+```
+
+```{bash,ame,cache=T,dependson="makeDankMEMEz",dependson="getSeqz"}
+for i in $(echo ../tmp/rna_*[^0].fa); do
+  j=$(echo -n ${i} | sed 's/rna_/accelDeg_/' )
+  k=$(echo -n ${i} | sed 's/rna_/noChange_/' )
+  l=$(echo -n ${i} | sed 's/rna_/ame_/' )
+  ame --verbose 1 \
+    --oc ${l} --control ${k} --bgformat 1 \
+    --scoring max --method ranksum --pvalue-report-threshold 0.05 \
+    --xalph ../data/iupacRNAalphabet.meme \
+    ${j} ../data/allRBP.meme
+done
+```
+
+#### \#ATS pipeline
+
+Then it's more Toronto action, with the Morris lab #ATS pipeline,
+first folding and then looking for motif enrichment.
+
+```{bash,get#ATS,cache=T}
+rm -rf ATS-motif-prediction
+git clone https://github.com/morrislab/ATS-motif-prediction.git
+```
+
+```{bash,foldit,cache=T,dependson="dnaToRna",error=F,warning=F,eval=T,DEBUG=F}
+for i in $(echo ../tmp/rna_*80.fa); do
+  j=$( basename ${i} )
+  l=$(echo -n ${i} | sed 's/rna_/folded_/' | sed 's/.fa/\//' )
+  mkdir -p ${l} && cd ${l} && RNAplfold -W 80 -L 40 -u 10  < ../${j} && cd ../../scripts
+done
+```
+
+```{perl,config#ATS,cache=T,dependson="get#ATS",dependson="foldit"}
+opendir(DIR,'../tmp'); 
+@setz = grep(/rna_.*80.fa/,readdir(DIR)); 
+foreach $i (@setz) {
+  print $i."\n";
+  open(SCRIPT,"<","ATS-motif-prediction/run2_new_RNAplfold_format.py");
+  $/=undef;
+  my $file = <SCRIPT>;
+  close SCRIPT;
+  $file =~ s/pos_file_name = ''/pos_file_name = '..\/..\/tmp\/dme211_systematicnames_AccelDeg.txt'/;
+  $file =~ s/neg_file_name = ''/neg_file_name = '..\/..\/tmp\/dme211_systematicnames_NoChange.txt'/;
+  $file =~ s/seq_file_name = ''/seq_file_name = '..\/..\/tmp\/$i'/;
+  my $folddir = $i;
+  $folddir =~ s/rna_/folded_/;
+  $folddir =~ s/.fa//;
+  my $out = $folddir;
+  $out =~ s/folded_//;
+  $file =~ s/RNAplfold_direct = ''/RNAplfold_direct = '..\/..\/tmp\/$folddir\/'/;
+  $file =~ s/final_out_name = ''/final_out_name = '..\/..\/tmp\/atsOut_$out'/;
+  $file =~ s/detailed_final_out_name = ''/detailed_final_out_name = '..\/..\/tmp\/atsDetailedOut_$out'/;
+  open(OUTSCRIPT,">","ATS-motif-prediction/runATSscript_$out.py");
+  print OUTSCRIPT $file;
+  close OUTSCRIPT;
+}
+```
+
+```{bash,runATS,cache=T,dependson="config#ATS",error=F,eval=T,DEBUG=F}
+for i in $(echo ../tmp/rna_*80.fa); do
+  j=$(basename ${i} | sed 's/rna_//' | sed 's/.fa//' )
+  cd ATS-motif-prediction && python2.7 ./runATSscript_${j}.py \
+    2> /dev/null > ../../tmp/atsOutRaw_${j} && cd ../../scripts
+done
+```
+
+#### Fighting tire with FIRE
+
+A classic. Let's see what we see.
+
+```{r,makingFIREinput,cache=T,eval=T,DEBUG=F}
+resultTable%>%ungroup%>%
+  filter(Class!="NotSignificant")%>%
+  mutate(cluster=as.numeric(Called=="AccelDeg"),orf=str_c(Systematic,""))%>%
+  dplyr::select(orf,cluster)%>%
+  write_tsv(path="../tmp/dme211_FIRE.txt")
+```
+
+```{bash,fire,cache=T,dependson="makingFIREinput",error=F,warning=F,error=F,eval=T,DEBUG=F}
+for i in $(echo ../tmp/rna_*[^0].fa); do
+  j=$(basename ${i} | sed 's/rna_//' | sed 's/.fa//' )
+  cp ../tmp/dme211_FIRE.txt ../tmp/dme211_FIRE_${j}.txt
+  perl ~/bin/FIRE-1.1a/fire.pl \
+    --expfiles=../tmp/dme211_FIRE_${j}.txt \
+    --exptype=discrete --fastafile_dna=../tmp/rna_${j}.fa \
+    --k=6 --minr=1 --dorna=0 --dodnarna=0 --nodups=1 > \
+    ../tmp/dme211_FIRE_${j}_stdout.txt 2>&1
+  perl ~/bin/FIRE-1.1a/MORESCRIPTS/makeresultindex.pl \
+    ../tmp/dme211_FIRE_${j}.txt \
+    "all destabilized genes or not, ${j}" 
+done
+```
+
+```{bash,fireGAP,cache=T,dependson="fireOnAccelDegCluster",error=F,warning=F,error=F,eval=T,DEBUG=F}
+for i in $(echo ../tmp/rna_*[^0].fa); do
+  j=$(basename ${i} | sed 's/rna_//' | sed 's/.fa//' )
+  cp ../tmp/dme211_FIRE.txt ../tmp/dme211_FIRE_gap_${j}.txt
+  perl ~/bin/FIRE-1.1a/fire_gapped.pl \
+    --expfile=../tmp/dme211_FIRE_gap_${j}.txt \
+    --exptype=discrete --fastafile_dna=../tmp/rna_${j}.fa \
+    --dorna=0 --dodnarna=0  --nodups=1 --kungapped=6 --gap=0-6 \
+    --minr=1 > \
+    ../tmp/dme211_FIRE_gap_${j}_stdout.txt 2>&1
+  perl ~/bin/FIRE-1.1a/MORESCRIPTS/makeresultindex.pl \
+    ../tmp/dme211_FIRE_gap_${j}.txt \
+    "all destabilized genes or not, gapped ${j}"
+done
+```
+
+#### TIESER?
+
+And we try TEISER.  
+
+```{bash,makeseeds,cache=T,eval=T,warning=F,error=F,eval=T,DEBUG=F}
+~/bin/TEISERv1.0/Programs/seed_creator \
+  -min_stem_length 3 -max_stem_length 7 \
+  -min_loop_length 4 -max_loop_length 9 \
+  -min_inf_seq 3 -max_inf_seq 6 \
+  -max_inf 30 -min_inf 10 \
+  -outfile ~/bin/TEISERv1.0/TEISER_Data/seeds/seeds.3-7.4-9.3-6.10-30
+
+/bin/ls ~/bin/TEISERv1.0/TEISER_Data/seeds/seeds.3-7.4-9.3-6.10-30 > \
+  ~/bin/TEISERv1.0/TEISER_Data/seeds/seedfiles.txt
+
+echo "done"
+```
+
+```{bash,evalseeds,cache=T,eval=T,error=F,warning=F,eval=T,DEBUG=F}
+for i in $(echo ../tmp/rna_*[^0].fa); do
+  j=$(basename ${i} | sed 's/rna_//' | sed 's/.fa//' )
+  perl ~/bin/TEISERv1.0/teiser_parallel.pl \
+    --expfile=../tmp/dme211_FIRE_${j}.txt \
+    --species=yeast --exptype=discrete > \
+    ../tmp/dme211_TEISER_${j}_stdout.txt 2>&1
+done
+```
+
+### Compiling the cis-elements analyses:
+
+```{bash}
+for i in $(echo ../tmp/rna_*[^0].fa); do
+  j=$(basename ${i} | sed 's/rna_//' | sed 's/.fa//' )
+  echo "Compiling $j results ....";
+  mkdir -p ../tmp/dme211_cisresults_${j}/
+  chmod a+rw ../tmp/dme211_cisresults_${j}/
+  cp ../tmp/decod_${j}.fa ../tmp/dme211_cisresults_${j}/decod_${j}.txt
+  cp ../tmp/ame_${j}.fa/ame.txt ../tmp/dme211_cisresults_${j}/ame_${j}.txt
+  cp ../tmp/atsDetailedOut_${j}80 ../tmp/dme211_cisresults_${j}/ats_${j}.txt
+  mkdir -p ../tmp/dme211_cisresults_${j}/FIRE
+  cp ../tmp/dme211_FIRE_${j}.txt_FIRE/index.htm ../tmp/dme211_cisresults_${j}/FIRE/fire_${j}.index.htm
+  cp ../tmp/dme211_FIRE_${j}.txt_FIRE/DNA/*summary ../tmp/dme211_cisresults_${j}/FIRE/fire_${j}.summary
+  cp ../tmp/dme211_FIRE_${j}.txt_FIRE/DNA/*signif.motifs.rep ../tmp/dme211_cisresults_${j}/FIRE/fire_${j}.signif.motifs.rep
+  mkdir -p ../tmp/dme211_cisresults_${j}/FIREgap
+  cp ../tmp/dme211_FIRE_gap_${j}.txt_META/*_FIRE/DNA/*summary ../tmp/dme211_cisresults_${j}/FIREgap/FIRE_gap_${j}.summary
+  cp ../tmp/dme211_FIRE_gap_${j}.txt_META/*_FIRE/DNA/*signif.motifs.rep ../tmp/dme211_cisresults_${j}/FIREgap/FIRE_gap_${j}.signif.motifs.rep
+  echo
+  echo
+  echo
+done
+```
+
+======
+
+What do we find? Some stuff. 
+
+```{r,lookingMotifsLoading,cache=T,echo=T,dependson="writingUTRs"}
+library(Biostrings) 
+
+theseSeqz <- list()
+for (thisone in c("fixed","pelechano","freebergW","freebergN")) {
+  message(thisone)
+  thisList <- pullSeqCoordsUTRs(str_c("../tmp/withoutCDS_",thisone,".bed"))
+  theseSeqz[[thisone]] <- list()
+  for (j in names(thisList)) {
+    theseSeqz[[thisone]][[j]] <- thisList[[j]]
+  }
+}
+CDSbed <- pullSeqCoordsUTRs(str_c("../tmp/CDS.bed"))
+CDSbed[[1]] <- renameSeqlevels(CDSbed[[1]],c(`chrmt`="chrM"))
+```
+
+
+```{r,lookingMotifsProcing,cache=T,warning=F,error=F,dependson="lookingMotifsLoading"}
+rm(modelz)
+rm(modelzAltNorm)
+rm(datarForModeling)
+
+motifs <- c(
+  `npl3`="UAUAUAA"
+  ,`hrp1`="UAYRUAV"
+  ,`pab1`="WUAUAUAW"
+  ,`nrd1`="UUCUUGUW"
+  ,`puf3`="UGUAHAUA"
+  ,`rna15`="UGYGUAUUYUCC"
+  ,`pub1`="HUUUUUUHW"
+  ,`puf5`="WUUGUAWUWU"
+  ,`nrd1`="UUCUUGUW"
+  ,`vts1`="GCUGGYS"
+  )
+#motifs <- map(motifs,str_replace_all,"U","T")%>%unlist
+
+keeplist <- resultTable%>%pull(Systematic)
+
+motifTibble <- crossing(
+  MotifName_Motif=str_c(names(motifs),"_",motifs)
+  ,Section=c("five","CDS","three")
+  ,SeqDef=c("fixed","pelechano","freebergN","freebergW")
+  )%>%separate(MotifName_Motif,c("MotifName","Motif"))
+
+getYeastSeq <- function(x,keeplist){
+  theseqz <- getSeq(x=BSgenome.Scerevisiae.UCSC.sacCer3,x[[1]])
+  theseqz <- theseqz[intersect(names(theseqz),keeplist)]
+  return(RNAStringSet(theseqz))
+}
+
+motifTibble <- motifTibble %>% 
+  group_by(MotifName,Motif,Section,SeqDef) %>%
+  do(TheseGRanges=ifelse(.$Section=="CDS"
+      ,list(CDSbed[[1]])
+      ,list(theseSeqz[[.$SeqDef]][[.$Section]]
+    ))) %>%
+  mutate(Seqz=map(TheseGRanges,getYeastSeq,keeplist))%>%
+  dplyr::select(-TheseGRanges) %>%
+  group_by(MotifName,Motif,Section,SeqDef) %>%
+  do(
+    {countz <- vcountPattern(pattern=.$Motif[[1]],subject=.$Seqz[[1]]
+      ,fixed=F)
+    names(countz) <- names(.$Seqz[[1]])
+    (data.frame(Systematic=names(countz),MotifCounts=countz,SeqLengths=width(.$Seqz[[1]])))}
+  )%>% 
+  left_join(resultTable%>%ungroup()%>%dplyr::select(Called,Systematic)
+    ,by="Systematic")
+
+g <- motifTibble %>% 
+  ggplot()+aes(x=factor(Called),fill=(MotifCounts>0))+
+  facet_grid(str_c(MotifName,"\n",Motif)~Section,scales="free")+
+  geom_bar(position="fill")
+g
+
+rm(fitmod)
+fitmod <- motifTibble%>%filter(SeqDef=="pelechano")%>%
+  mutate(Called=relevel(factor(Called),"NoChange"))%>%
+  glm(data=.,Called~MotifCounts:MotifName:Section+SeqLengths
+    ,family=binomial(link='logit'))
+fitmod%>%summary()
+summary(fitmod)$coefficients[(summary(fitmod)$coefficients[,4]<0.05),]
+```
+
+```{r,motifFindPlotz,cache=T,dependson="lookingMotifsProcing"}
+g <- motifTibble%>%
+  filter(MotifName%in%c("hrp1","npl3","pab1","puf3"))%>%
+  group_by(MotifName,Section,SeqDef,Called)%>%
+  filter(SeqDef=="pelechano")%>%
+  dplyr::summarize(MeanMotifsPerFeature=mean(MotifCounts)
+    ,FracPerfectMatches=mean(MotifCounts>0))%>%
+  mutate(Called=ifelse(Called=="AccelDeg","Destabilized","Not destabilized"))%>%
+  mutate(Section=ifelse(Section=="CDS","Coding"
+    ,ifelse(Section=="five","5' leader","3' UTR")))%>%
+  mutate(MotifName=c(`hrp1`="Hrp1p motif",`puf3`="Puf3p motif"
+    ,`npl3`="Npl3p motif",`pab1`="Pab1p motif")[MotifName])%>%
+  ggplot()+facet_wrap(~MotifName,scales="free")+
+  aes(x=Section,fill=Called,y=FracPerfectMatches)+#MeanMotifsPerFeature)+
+  geom_bar(stat="identity",position="dodge")+
+  theme_bw()+ylab("Fraction of features with perfect motif matches")+xlab("")+
+  scale_y_continuous(limits=c(0,1))+
+  theme(axis.text.x=element_text(angle=90)) 
+g
+
+z <- motifTibble%>%ungroup()%>%
+  filter(MotifName%in%c("hrp1","npl3","pab1"))%>%
+  filter(SeqDef=="pelechano")%>%
+  dplyr::select(-Motif)%>%
+  spread(MotifName,MotifCounts) %>%
+  mutate_at(c("hrp1","npl3","pab1"),as.logical)%>%
+  group_by(Section,Called,Systematic)%>%
+  dplyr::summarize(MotifsPerFeature=sum(hrp1,npl3,pab1)) %>% 
+  group_by(Section,Called)%>%
+  dplyr::summarize(MeanMotifsPerFeature=mean(MotifsPerFeature)
+    ,HasMotif=sum(MotifsPerFeature>0)) %>%
+  mutate(Called=ifelse(Called=="AccelDeg","Destabilized","Not destabilized"))%>%
+  mutate(Section=ifelse(Section=="CDS","Coding"
+    ,ifelse(Section=="five","5' leader","3' UTR"))) 
+z
+g2 <- z %>% ggplot()+
+  aes(x=Section,fill=Called,y=MeanMotifsPerFeature)+
+  geom_bar(stat="identity",position="dodge")+
+  theme_bw()+ylab("Average number of reported motifs\nof Hrp1p, Pab1p with > 1 perfect match,\nper feature")+
+  xlab("")+theme(axis.text.x=element_text(angle=90)) 
+g2
+```
+
+NOTE THAT the motif reported for Npl3p in the RBP database is WRONG.
+That's actually the Hrp1/Nab4 motif, as reported in the original
+Guisbert 2005 paper. But that was wrong in the first database, and
+they pulled that in, so ... There's a lesson here about trusting
+databases. Trust, but verify.
+
+```{r,hrp1Core,cache=T}
+motifs <- c(
+  `hrp1core`="UAUAUA"
+  ,`hrp1vitro`="UAYRUA"
+  )
+#motifs <- map(motifs,str_replace_all,"U","T")%>%unlist
+
+keeplist <- resultTable%>%pull(Systematic)
+
+motifTibble <- crossing(
+  MotifName_Motif=str_c(names(motifs),"_",motifs)
+  ,Section=c("five","CDS","three")
+  ,SeqDef=c("fixed","pelechano","freebergN","freebergW")
+  )%>%separate(MotifName_Motif,c("MotifName","Motif"))
+
+getYeastSeq <- function(x,keeplist){
+  theseqz <- getSeq(x=BSgenome.Scerevisiae.UCSC.sacCer3,x[[1]])
+  theseqz <- theseqz[intersect(names(theseqz),keeplist)]
+  return(RNAStringSet(theseqz))
+}
+
+motifTibble <- motifTibble %>% 
+  group_by(MotifName,Motif,Section,SeqDef) %>%
+  do(TheseGRanges=ifelse(.$Section=="CDS"
+      ,list(CDSbed[[1]])
+      ,list(theseSeqz[[.$SeqDef]][[.$Section]]
+    ))) %>%
+  mutate(Seqz=map(TheseGRanges,getYeastSeq,keeplist))%>%
+  dplyr::select(-TheseGRanges) %>%
+  group_by(MotifName,Motif,Section,SeqDef) %>%
+  do(
+    {countz <- vcountPattern(pattern=.$Motif[[1]],subject=.$Seqz[[1]]
+      ,fixed=F)
+    names(countz) <- names(.$Seqz[[1]])
+    (data.frame(Systematic=names(countz),MotifCounts=countz,SeqLengths=width(.$Seqz[[1]])))}
+  )%>% 
+  left_join(resultTable%>%ungroup()%>%dplyr::select(Called,Systematic)
+    ,by="Systematic")
+```
+
+```{r,hrp1Plotz,cache=T,dependson="lookingMotifsProcing"}
+g <- motifTibble %>% 
+  ggplot()+aes(x=factor(Called),fill=(MotifCounts>0))+
+  facet_grid(str_c(MotifName,"\n",Motif)~Section,scales="free")+
+  geom_bar(position="fill")
+g
+
+rm(fitmod)
+fitmod <- motifTibble%>%filter(SeqDef=="pelechano")%>%
+  mutate(Called=relevel(factor(Called),"NoChange"))%>%
+  glm(data=.,Called~MotifCounts:Section+SeqLengths:Section
+    ,family=binomial(link='logit'))
+fitmod%>%summary()
+summary(fitmod)$coefficients[(summary(fitmod)$coefficients[,4]<0.05),]
+
+pdat <- motifTibble%>%
+  filter(MotifName%in%c("hrp1core","hrp1vitro"))%>%
+  group_by(MotifName,Section,SeqDef,Called)%>%
+  filter(SeqDef=="pelechano")%>%
+  dplyr::summarize(MeanMotifsPerFeature=mean(MotifCounts)
+    ,FracPerfectMatches=mean(MotifCounts>0))%>%
+  mutate(Called=ifelse(Called=="AccelDeg","Destabilized","Not destabilized"))%>%
+  mutate(Section=ifelse(Section=="CDS","Coding"
+    ,ifelse(Section=="five","5' UTR","3' UTR")))%>%
+  mutate(MotifName=c(`hrp1core`="Hrp1p motif",`hrp1vitro`="Hrp1p motif")[MotifName])
+g <- pdat %>% ggplot()+facet_wrap(~MotifName,scales="free")+
+  aes(x=Section,fill=Called,y=FracPerfectMatches)+#MeanMotifsPerFeature)+
+  geom_bar(stat="identity",position="dodge")+
+  theme_bw()+ylab("Fraction of features with perfect motif matches")+xlab("")+
+  scale_y_continuous(limits=c(0,1))+
+  theme(axis.text.x=element_text(angle=90)) 
+g
+
+z <- motifTibble%>%ungroup()%>%
+  filter(MotifName%in%c("hrp1core","hrp1vitro"))%>%
+  filter(SeqDef=="pelechano")%>%
+  dplyr::select(-Motif)%>%
+  spread(MotifName,MotifCounts) %>%
+  mutate_at(c("hrp1core","hrp1vitro"),as.logical)%>%
+  group_by(Section,Called,Systematic)%>%
+  dplyr::summarize(MotifsPerFeature=sum(hrp1core,hrp1vitro)) %>% 
+  group_by(Section,Called)%>%
+  dplyr::summarize(MeanMotifsPerFeature=mean(MotifsPerFeature)
+    ,HasMotifFrac=sum(MotifsPerFeature>0)/length(MotifsPerFeature)) %>%
+  mutate(Called=ifelse(Called=="AccelDeg","Destabilized","Not destabilized"))%>%
+  mutate(Section=ifelse(Section=="CDS","Coding"
+    ,ifelse(Section=="five","5' UTR","3' UTR"))) 
+z
+g2 <- z %>% 
+  mutate(Called=ifelse(Called=="Destabilized"
+    ,"Destabilized\nn=78","Not destabilized\nn=4649"))%>%
+  ggplot()+
+  aes(x=Section,fill=Called,y=MeanMotifsPerFeature)+
+  geom_bar(stat="identity",position="dodge")+
+  theme_bw()+ylab("Mean perfect matches per gene region")+
+  ggtitle("Hrp1p motifs in different gene regions")+
+  xlab("")+theme(axis.text.x=element_text(angle=0))
+g2
+
+```
+
+
+
+
+
+```{r}
+
+msnTibble <- crossing(
+  MotifName_Motif=str_c(c("Msn2/4pF","Msn2/4pR"),"_",c("AGGGG","CCCCT"))
+  ,Section=c("five")
+  ,SeqDef=c("pelechano")
+  )%>%separate(MotifName_Motif,c("MotifName","Motif"),sep="_")%>%
+  mutate(Motif=str_replace_all(Motif,"T","U"))
+
+msnTibble <- msnTibble %>% 
+  group_by(MotifName,Motif,Section,SeqDef) %>%
+  do(TheseGRanges=ifelse(.$Section=="CDS"
+      ,list(CDSbed[[1]])
+      ,list(theseSeqz[[.$SeqDef]][[.$Section]]
+    ))) %>%
+  mutate(Seqz=map(TheseGRanges,getYeastSeq,keeplist))%>%
+  dplyr::select(-TheseGRanges) %>%
+  group_by(MotifName,Motif,Section,SeqDef) %>%
+  do(
+    {countz <- vcountPattern(pattern=.$Motif[[1]],subject=.$Seqz[[1]]
+      ,fixed=F)
+    names(countz) <- names(.$Seqz[[1]])
+    (data.frame(Systematic=names(countz),MotifCounts=countz,SeqLengths=width(.$Seqz[[1]])))}
+  )%>% 
+  left_join(resultTable%>%ungroup()%>%dplyr::select(Called,Systematic)
+    ,by="Systematic")
+
+msnTibble %>% ungroup() %>% dplyr::select(-MotifName) %>% 
+  spread(Motif,MotifCounts) %>% group_by(Called) %>%
+  mutate_at(c("AGGGG","CCCCU"),as.logical) %>%
+  mutate(HasMsn24Site=AGGGG+CCCCU) %>%
+#  dplyr::select(Systematic,HasMsn24Site,SeqDef) %>%
+  left_join(brauer%>%dplyr::select(Systematic,ESR),by="Systematic")%>%
+  group_by(Called,ESR,SeqDef)%>%dplyr::summarize(
+    CountNoSiteE=sum(HasMsn24Site==0)
+    ,CountSiteE=sum(HasMsn24Site>0)
+    ,CountNoSiteF=sum(AGGGG==0)
+    ,CountSiteF=sum(AGGGG>0)
+    ,CountNoSiteR=sum(CCCCU==0)
+    ,CountSiteR=sum(CCCCU>0)
+    )%>%arrange(SeqDef)
+
+27/(27+16+25)
+34/(34+34+1)
+(104+87+804)/((104+87+804)+(412+106+2801))
+
+```
+
+```{r,hrp1p}
+hrpTibble <- crossing(
+  MotifName_Motif=str_c(c("hrp1p"),"_",c("UAYRUA"))
+  ,Section=c("five")
+  ,SeqDef=c("pelechano")
+  )%>%separate(MotifName_Motif,c("MotifName","Motif"),sep="_")%>%
+  mutate(Motif=str_replace_all(Motif,"T","U"))
+
+hrpTibble <- hrpTibble %>% 
+  group_by(MotifName,Motif,Section,SeqDef) %>%
+  do(TheseGRanges=ifelse(.$Section=="CDS"
+      ,list(CDSbed[[1]])
+      ,list(theseSeqz[[.$SeqDef]][[.$Section]]
+    ))) %>%
+  mutate(Seqz=map(TheseGRanges,getYeastSeq,keeplist))%>%
+  dplyr::select(-TheseGRanges) %>%
+  group_by(MotifName,Motif,Section,SeqDef) %>%
+  do(
+    {countz <- vcountPattern(pattern=.$Motif[[1]],subject=.$Seqz[[1]]
+      ,fixed=F)
+    names(countz) <- names(.$Seqz[[1]])
+    (data.frame(Systematic=names(countz),MotifCounts=countz,SeqLengths=width(.$Seqz[[1]])))}
+  )%>% 
+  left_join(resultTable%>%ungroup()%>%dplyr::select(Called,Systematic)
+    ,by="Systematic")
+
+hrpTibble %>% ungroup() %>% 
+  mutate(HasHrp1Site=MotifCounts>0) %>%
+  left_join(brauer%>%dplyr::select(Systematic,ESR),by="Systematic")%>%
+  group_by(Called,Section)%>%dplyr::summarize(
+    CountNoSiteE=sum(HasHrp1Site==0)
+    ,CountSiteE=sum(HasHrp1Site>0)
+    )
+
+```
+
+
+
+```{r}
+
+ggsave("../output/Figure2_S_averageMotifsPerSection.un.tiff"
+  ,g2,width=5,height=3)
+
+```
+
+
+```{r}
+sessionInfo()
+```
+

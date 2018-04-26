@@ -1,0 +1,2860 @@
+% Template for PLoS
+% Version 3.4 January 2017
+%
+% % % % % % % % % % % % % % % % % % % % % %
+%
+% -- IMPORTANT NOTE
+%
+% This template contains comments intended 
+% to minimize problems and delays during our production 
+% process. Please follow the template instructions
+% whenever possible.
+%
+% % % % % % % % % % % % % % % % % % % % % % % 
+%
+% Once your paper is accepted for publication, 
+% PLEASE REMOVE ALL TRACKED CHANGES in this file 
+% and leave only the final text of your manuscript. 
+% PLOS recommends the use of latexdiff to track changes during review, as this will help to maintain a clean tex file.
+% Visit https://www.ctan.org/pkg/latexdiff?lang=en for info or contact us at latex@plos.org.
+%
+%
+% There are no restrictions on package use within the LaTeX files except that 
+% no packages listed in the template may be deleted.
+%
+% Please do not include colors or graphics in the text.
+%
+% The manuscript LaTeX source should be contained within a single file (do not use \input, \externaldocument, or similar commands).
+%
+% % % % % % % % % % % % % % % % % % % % % % %
+%
+% -- FIGURES AND TABLES
+%
+% Please include tables/figure captions directly after the paragraph where they are first cited in the text.
+%
+% DO NOT INCLUDE GRAPHICS IN YOUR MANUSCRIPT
+% - Figures should be uploaded separately from your manuscript file. 
+% - Figures generated using LaTeX should be extracted and removed from the PDF before submission. 
+% - Figures containing multiple panels/subfigures must be combined into one image file before submission.
+% For figure citations, please use "Fig" instead of "Figure".
+% See http://journals.plos.org/plosone/s/figures for PLOS figure guidelines.
+%
+% Tables should be cell-based and may not contain:
+% - spacing/line breaks within cells to alter layout or alignment
+% - do not nest tabular environments (no tabular environments within tabular environments)
+% - no graphics or colored text (cell background color/shading OK)
+% See http://journals.plos.org/plosone/s/tables for table guidelines.
+%
+% For tables that exceed the width of the text column, use the adjustwidth environment as illustrated in the example table in text below.
+%
+% % % % % % % % % % % % % % % % % % % % % % % %
+%
+% -- EQUATIONS, MATH SYMBOLS, SUBSCRIPTS, AND SUPERSCRIPTS
+%
+% IMPORTANT
+% Below are a few tips to help format your equations and other special characters according to our specifications. For more tips to help reduce the possibility of formatting errors during conversion, please see our LaTeX guidelines at http://journals.plos.org/plosone/s/latex
+%
+% For inline equations, please be sure to include all portions of an equation in the math environment.  For example, x$^2$ is incorrect; this should be formatted as $x^2$ (or $\mathrm{x}^2$ if the romanized font is desired).
+%
+% Do not include text that is not math in the math environment. For example, CO2 should be written as CO\textsubscript{2} instead of CO$_2$.
+%
+% Please add line breaks to long display equations when possible in order to fit size of the column. 
+%
+% For inline equations, please do not include punctuation (commas, etc) within the math environment unless this is part of the equation.
+%
+% When adding superscript or subscripts outside of brackets/braces, please group using {}.  For example, change "[U(D,E,\gamma)]^2" to "{[U(D,E,\gamma)]}^2". 
+%
+% Do not use \cal for caligraphic font.  Instead, use \mathcal{}
+%
+% % % % % % % % % % % % % % % % % % % % % % % % 
+%
+% Please contact latex@plos.org with any questions.
+%
+% % % % % % % % % % % % % % % % % % % % % % % %
+
+\documentclass[10pt,letterpaper]{article}
+\usepackage[top=0.85in,left=2.75in,footskip=0.75in]{geometry}
+
+% amsmath and amssymb packages, useful for mathematical formulas and symbols
+\usepackage{amsmath,amssymb}
+
+% Use adjustwidth environment to exceed column width (see example table in text)
+\usepackage{changepage}
+
+% Use Unicode characters when possible
+\usepackage[utf8x]{inputenc}
+
+% textcomp package and marvosym package for additional characters
+\usepackage{textcomp,marvosym}
+
+% cite package, to clean up citations in the main text. Do not remove.
+\usepackage{cite}
+
+% Use nameref to cite supporting information files (see Supporting Information section for more info)
+\usepackage{nameref,hyperref}
+
+% line numbers
+\usepackage[right]{lineno}
+
+% ligatures disabled
+\usepackage{microtype}
+\DisableLigatures[f]{encoding = *, family = * }
+
+% color can be used to apply background shading to table cells only
+\usepackage[table]{xcolor}
+
+% array package and thick rules for tables
+\usepackage{array}
+
+% create "+" rule type for thick vertical lines
+\newcolumntype{+}{!{\vrule width 2pt}}
+
+% create \thickcline for thick horizontal lines of variable length
+\newlength\savedwidth
+\newcommand\thickcline[1]{%
+  \noalign{\global\savedwidth\arrayrulewidth\global\arrayrulewidth 2pt}%
+  \cline{#1}%
+  \noalign{\vskip\arrayrulewidth}%
+  \noalign{\global\arrayrulewidth\savedwidth}%
+}
+
+% \thickhline command for thick horizontal lines that span the table
+\newcommand\thickhline{\noalign{\global\savedwidth\arrayrulewidth\global\arrayrulewidth 2pt}%
+\hline
+\noalign{\global\arrayrulewidth\savedwidth}}
+
+% Remove comment for double spacing
+\usepackage{setspace} 
+\doublespacing
+
+\renewcommand*\familydefault{\sfdefault} 
+
+% Text layout
+\raggedright
+\setlength{\parindent}{0.5cm}
+\textwidth 5.25in 
+\textheight 8.75in
+
+% Bold the 'Figure #' in the caption and separate it from the title/caption with a period
+% Captions will be left justified
+\usepackage[aboveskip=1pt,labelfont=bf,labelsep=period,justification=raggedright,singlelinecheck=off]{caption}
+\renewcommand{\figurename}{Fig}
+
+% Use the PLoS provided BiBTeX style
+\bibliographystyle{scripts/plos2015}
+
+% Remove brackets from numbering in List of References
+\makeatletter
+\renewcommand{\@biblabel}[1]{\quad#1.}
+\makeatother
+
+% Leave date blank
+\date{}
+
+% Header and Footer with logo
+\usepackage{lastpage,fancyhdr,graphicx}
+\usepackage{epstopdf}
+\pagestyle{myheadings}
+\pagestyle{fancy}
+\fancyhf{}
+\setlength{\headheight}{27.023pt}
+\lhead{\includegraphics[width=2.0in]{scripts/PLOS-submission.eps}}
+\rfoot{\thepage/\pageref{LastPage}}
+\renewcommand{\footrule}{\hrule height 2pt \vspace{2mm}}
+\fancyheadoffset[L]{2.25in}
+\fancyfootoffset[L]{2.25in}
+\lfoot{\sf PLOS}
+
+%% Include all macros below
+
+\newcommand{\lorem}{{\bf LOREM}}
+\newcommand{\ipsum}{{\bf IPSUM}}
+
+%% END MACROS SECTION
+
+
+\begin{document}
+\vspace*{0.2in}
+
+% Title must be 250 characters or less.
+\begin{flushleft}
+{\Large
+\textbf\newline{
+  Systematic identification of factors mediating accelerated mRNA 
+  degradation in response to changes in environmental nitrogen.
+} % Please use "sentence case" for title and headings (capitalize only the first word in a title (or heading), the first word in a subtitle (or subheading), and any proper nouns).
+}
+\newline
+% Insert author names, affiliations and corresponding author email (do not include titles, positions, or degrees).
+\\
+Darach Miller\textsuperscript{1},
+Nathan Brandt\textsuperscript{1},
+David Gresham\textsuperscript{1}
+\\
+\bigskip
+\textbf{1} Center for Genomics and Systems Biology, Department of
+Biology, New York University, New York, 10003, USA.
+\\
+\bigskip
+
+% Insert additional author notes using the symbols described below. Insert symbol callouts after author names as necessary.
+% 
+% Remove or comment out the author notes below if they aren't used.
+%
+% Primary Equal Contribution Note
+%\Yinyang These authors contributed equally to this work.
+
+% Additional Equal Contribution Note
+% Also use this double-dagger symbol for special authorship notes, such as senior authorship.
+%\ddag These authors also contributed equally to this work.
+
+% Current address notes
+%\textcurrency Current Address: Dept/Program/Center, Institution Name, City, State, Country % change symbol to "\textcurrency a" if more than one current address note
+% \textcurrency b Insert second current address 
+% \textcurrency c Insert third current address
+
+% Deceased author note
+%\dag Deceased
+
+% Group/Consortium Author Note
+%\textpilcrow Membership list can be found in the Acknowledgments section.
+
+% Use the asterisk to denote corresponding authorship and provide email address in note below.
+* dgresham@nyu.edu
+
+\end{flushleft}
+% Please keep the abstract below 300 words
+\section*{Abstract}
+Cellular responses to changing environments frequently
+involve rapid reprogramming of the transcriptome.
+Regulated changes in mRNA degradation rates can
+accelerate reprogramming by clearing or stabilizing extant transcripts. 
+%Budding yeast respond to an improvement in
+%nitrogen-availability by triggering a transcriptional reprogramming
+%that functions to upregulate ribosome biogenesis and repress
+%alternative nitrogen-source catabolism. 
+Here, we measured mRNA stability using 4-thiouracil labeling
+in the budding yeast \textit{Saccharomyces cerevisiae}
+during a nitrogen upshift and found that 78 mRNAs are subject
+to destabilization. These transcripts include Nitrogen
+Catabolite Repression (NCR) and carbon metabolism mRNAs,
+suggesting that mRNA destabilization is a mechanism 
+for targeted reprogramming of the transcriptome.
+To explore the molecular basis of
+destabilization we implemented a SortSeq approach to
+screen the pooled deletion collection library
+for \textit{trans} factors that mediate rapid \textit{GAP1}
+mRNA repression.
+We combined low-input multiplexed \underline{B}arcode sequencing 
+with branched-DNA single-molecule mRNA \underline{F}ISH and 
+\underline{F}luorescence-activated cell sorting (BFF)
+to identify the Lsm1-7p/Pat1p complex and general mRNA
+decay machinery as important for \textit{GAP1} mRNA clearance.
+We also find that the decapping modulators 
+\textit{EDC3} and \textit{SCD6}, translation
+factor eIF4G2, and the 5' UTR of \textit{GAP1}
+are factors that mediate rapid repression of \textit{GAP1} mRNA, 
+suggesting that translational control may impact the 
+post-transcriptional fate of mRNAs in response to 
+environmental changes.
+
+% Please keep the Author Summary between 150 and 200 words
+% Use first person. PLOS ONE authors please skip this step. 
+% Author Summary not valid for PLOS ONE submissions.   
+\section*{Author summary}
+Budding yeast rapidly increase their rate of growth upon re-feeding of
+glutamine to a nitrogen-limited culture. Within the first several
+minutes, the transcriptome begins to reprogram. 
+We investigated changes in mRNA stability
+using a 4-thiouracil label-chase experiment 
+to track the extant transcriptome during the nitrogen upshift.
+We found that a functionally enriched set of mRNA are destabilized,
+including some members of the Nitrogen Catabolite Repression regulon.
+To find genetic factors that may be involved, we used \textit{GAP1}
+mRNA as a marker of this post-transcriptional regulation and
+developed a method for estimating mRNA abundance using a combination
+of mRNA FISH, FACS, and Barcode sequencing. We identified
+the Lsm1-7p/Pat1p complex as having large differences in \textit{GAP1}
+mRNA regulation, and further work identified that
+the decapping modulators \textit{EDC3} and \textit{SCD6}, the
+translation initiation factor \textit{eIF4G2},
+and the 5' UTR of \textit{GAP1} have defects in
+rapidly clearing \textit{GAP1} mRNA during this transition. 
+Our study suggests that changes in the translational status of
+specific mRNAs may impact their stability in response to environmental
+signals.
+%
+%However,
+%the phenotype of deletions of \textit{SCD6} and \textit{eIF4G2}
+%suggest this may result from a relative stabilization before the shift.
+
+\linenumbers
+
+% Use "Eq" instead of "Equation" for equation citations.
+\section*{Introduction}
+
+Regulated changes in mRNA abundance are a primary cellular response
+to external stimuli.
+Both the rate of synthesis and the rate of degradation determine the
+steady-state abundance of a particular mRNA and the kinetics
+with which abundance changes occur
+\cite{Hargrove1989,Perez-Ortin2013}. 
+Changes in mRNA degradation rates fulfill an important 
+mechanistic role in diverse systems, including 
+development \cite{Alonso2012,West2017} and disease
+\cite{Aghib1990}.
+In budding yeast, the rate of
+mRNA degradation is affected by environmental stresses
+\cite{Canadell2015}, cellular growth rate
+\cite{Garcia-Martinez2016}, as well as by improvements in 
+nutrient conditions \cite{Scheffler1998}.
+
+Environmental shifts trigger rapid reprogramming of the budding yeast
+transcriptome in response to stresses and nutritional
+changes \cite{Gasch2000,Conway2012}. Changes in mRNA degradation rates
+have been shown to play a role in responses to heat-shock, osmotic
+stress, pH increases, and oxidative stress
+\cite{Castells2011,Romero2009,Canadell2015,Molina2008}. 
+In response to these
+diverse stresses destabilization of mRNAs encoding 
+ribosomal-biogenesis gene products, and  
+stress-induced mRNA occurs \cite{Canadell2015}. 
+Simultaneous increases in both synthesis and
+degradation rates of some  mRNAs may serve to speed the return to a
+steady-state following a transient pulse of regulation
+\cite{Shalem2008}. Addition of glucose to carbon-limited cells 
+results in both stabilization of 
+ribosomal protein mRNAs \cite{Yin2003} and destabilization
+of gluconeogenic transcripts \cite{De_la_Cruz2002,Mercado1994}.
+Destabilization of transcripts can
+have a delayed effect on reducing protein levels compared to
+up-regulated genes \cite{Lee2011}. This suggests that accelerated
+mRNA degradation may serve additional purposes. For example, clearance
+of specific mRNAs could increase nucleotide pools
+\cite{Kresnowati2006} or facilitate reallocation of
+translational capacity 
+\cite{Kief1981,Giordano2016,Shachrai2010}. 
+%Identifying the genetic
+%factors responsible for the accelerated mRNA degradation would allow
+%us to test if regulated destabilization of specific transcripts is
+%adaptive.
+
+Yeast cells metabolize a wide variety of nitrogen sources, but
+preferentially assimilate and metabolize specific nitrogen compounds.
+Transcriptional regulation, known as
+“nitrogen catabolite repression” (NCR) \cite{Magasanik2002},
+controls the expression of mRNAs
+encoding transporters, metabolic enzymes, and regulatory
+factors required for utilization of alternative nitrogen sources. 
+NCR-regulated transcripts are expressed in the
+absence of a readily metabolized (preferred) nitrogen sources or in
+the presence of growth-limiting concentrations (in the low μM range)
+of any nitrogen source \cite{Godard2007,Airoldi2016}. Regulation
+of NCR targets is mediated by two activating GATA
+transcription factors, Gln3p and Gat1p, and two repressing
+GATA factors, Dal80p and Gzf3p. \textit{GAT1}, \textit{GZF3}, and
+\textit{DAL80} promoters
+contain GATAA motifs, and thus transcriptional regulation of NCR
+targets entails self-regulatory and cross-regulatory loops. When
+supplied with a preferred nitrogen source such as glutamine, the
+NCR-activating transcription factors Gat1p and Gln3p are excluded from
+the nucleus by TORC1-dependent and -independent mechanisms
+\cite{Beck1999,Tate2013,Tate2017} and NCR transcripts are strongly
+repressed. The activity of some NCR gene
+products is also controlled by post-translational mechanisms
+\cite{Cooper1983} such as the General Amino-acid Permease
+(Gap1p) which is rapidly inactivated upon a nitrogen 
+upshift via ubiquitination
+\cite{Stanbrough1995,Risinger2006,Merhi2012}. Recently, we have
+identified an additional level of regulation of NCR transcripts: cells
+growing in NCR de-repressing conditions accelerate the degradation
+of \textit{GAP1} %and \textit{DIP5} mRNAs
+mRNA upon addition of glutamine
+\cite{Airoldi2016}. Thus, mRNA degradation rate regulation may be an
+additional mechanism for clearing NCR-regulated transcripts upon 
+improvements in environmental nitrogen availability.
+
+Multiple pathways mediate the degradation of mRNAs. The main pathway
+of mRNA degradation occurs by deadenylation and decapping
+prior to 5’ to 3’ exonucleolytic degradation by Xrn1p; however,
+transcripts are also degraded 3’ to 5’ via the exosome, or via
+activation of co-translational quality control mechanisms
+\cite{Parker2012}. Deadenylation of mRNAs by the Ccr4-Not complex
+allows the mRNA to be bound at the 3' end by the 
+Lsm1-7p/Pat1p complex, a heptameric
+ring comprising the SM-like proteins Lsm2-7p and the
+cytoplasmic-specific Lsm1p \cite{Tharun2000,Sharif2013}, which then
+recruits factors for decapping by Dcp2p. 
+Recruitment of the decapping enzyme \cite{Coller2004} is the 
+rate-limiting step for canonical 5'-3' degradation.
+Therefore Lsm1-7p, Pat1p,
+and associated factors play a key role in determining the kinetics
+of mRNA degradation \cite{Nissan2010}. 
+
+Regulation of mRNA degradation pathways can alter the stability of
+specific mRNAs. For example, the RNA-binding protein (RBP) Puf3p
+recognizes a \textit{cis}-element in 3’ UTRs \cite{Olivas2000} 
+and affects mRNA degradation rates depending on
+Puf3p phosphorylation status \cite{lee2015}. 
+%Transcript properties
+%also associated with translation dynamics affect mRNA degradation, at
+%the level of elongation \cite{Sweet2012,Presnyak2015,Neymotin2016} or
+%competition between the decapping enzymes and translation initiation
+%\cite{Schwartz2000}. 
+In addition to \textit{cis}-elements within the transcript, 
+promoters have
+been shown to mark certain RNA-protein (RNP) complexes to specify
+their post-transcriptional regulation
+\cite{Mercado1994,Haimovich2013,Trcek2011,braun2016snf1}. These
+mechanisms may be controlled by a variety of different signalling
+pathways including Snf1 \cite{Young2012,Braun2014}, PKA
+\cite{Ramachandran2011}, Phk1/2 \cite{Luo2011}, and TORC1
+\cite{Talarek2010}. Thus, regulated changes in  mRNA degradation
+rates entails numerous mechanisms that collectively tune stability of
+mRNAs in response to the activity of signalling pathways. 
+
+Here, we studied the global regulation of mRNA degradation rates upon
+an increase in nitrogen availability using 4-thiouracil (4tU) 
+label-chase and RNAseq.
+We found that a set of 78 mRNAs are subject to accelerated mRNA
+degradation, including many NCR transcripts as well as mRNAs
+encoding components of
+carbon metabolism. To identify the mechanism underlying accelerated
+mRNA degradation we designed a high-throughput genetic screen using 
+\underline{B}arcode-sequencing of a pooled library which was
+fractionated using \underline{F}luorescence-activated cell 
+sorting on the basis of single molecule mRNA \underline{F}ISH signal (BFF). 
+We screened the barcoded
+yeast deletion collection to test the effect of each gene deletion
+on the abundance of \textit{GAP1} mRNA in NCR de-repressing 
+conditions and its clearance following the 
+addition of glutamine. We
+find that the Lsm1-7p/Pat1p complex and decapping modifiers affect
+both \textit{GAP1} mRNA steady-state expression and its 
+accelerated degradation.
+This work expands our
+understanding of mRNA stability regulation in remodeling the
+transcriptome during a relief from growth-limitation and demonstrates
+a generalizable approach to the study of genetic determinants of mRNA
+dynamics.
+
+\section*{Results}
+
+\subsection*{Transcriptional reprogramming precedes physiological remodeling}
+
+Cellular responses to environmental signals entail coordinated changes
+in both gene expression and cellular physiology.  Previously, we
+studied the steady-state and dynamic responses of 
+\textit{Saccharomyces cerevisiae} 
+(budding yeast) to environmental nitrogen
+\cite{Airoldi2016}, and found that the transcriptome is rapidly
+reprogrammed following a single pulsed addition of glutamine to
+nitrogen-limited cells in either a chemostat or
+batch culture. To study physiological changes in response to a
+nitrogen upshift, we measured growth rates of a population of 
+cells. A prototrophic haploid lab strain 
+(FY4, isogenic to S288c) grows with a
+4.5 hour doubling time in batch culture in minimal media 
+containing proline as a sole
+nitrogen source (Fig~\ref{figure1}A). Upon addition of 400μM glutamine
+the cells undergo a 2-hour lag period during which no change in
+population growth rate is detected, but the average cell size
+continuously increases ($\sim$21\% increase in mean volume 
+Fig~\ref{figure1}B). Following the 2-hour lag, the population adopts a 2.1 
+hour doubling time.
+%This lag in population growth rate upon an upshift has been 
+%described before \cite{Carter1978}.
+By contrast, global gene expression changes are detected
+within three minutes of the upshift \cite{Airoldi2016}. 
+Thus, transcriptome remodeling precedes
+physiological remodeling in response to a nitrogen upshift.
+
+To evaluate concordance in transcriptome remodeling between chemostat
+and batch nitrogen upshifts, and the extent to which they reflect
+changes in gene expression observed during systematic steady-state 
+changes in growth rates using chemostats, we
+performed principal component analysis of global gene expression
+(Fig~\ref{figure1}C). The first two principal components, which
+account for almost half of the total variation, clearly separate
+steady-state and nitrogen upshift cultures.  Systematic changes in
+growth rate primarily results in
+separation of gene expression states along the second principal
+component, whereas upshift experiments vary along the first 
+principal component.  This suggests that
+although a nitrogen upshift results in a gene expression state 
+reflecting increased cell growth rates \cite{Airoldi2016}, the
+transcriptome is remodeled through a distinct state. 
+In upshift experiments in
+chemostats, the gene expression trajectory ultimately returns to 
+the initial steady-state condition as excess nitrogen is 
+depleted by consumption and dilution 
+(\nameref{longTermPCA}, \nameref{timeplot}). 
+
+To investigate the functional basis of gene expression programs
+in the upshift and steady-state conditions, we computed the
+correlation of each transcript with the loadings on these first two
+principal components and performed gene-set enrichment analysis
+(\nameref{microarrayPCAgsea}). 
+Component 1 is positively correlated with functions including 
+mRNA processing, transcription from RNA polymerases (I,II,and III),
+and chromatin organization, and negatively correlated with
+cytoskeleton organization,
+vesicle organization, membrane fusion, and cellular respiration.
+Both steady-state and upshift gene expression
+trajectories increase with principal component 2, but they diverge
+along principal component 1. Components 1 and 2 are 
+strongly enriched for terms including ribosome biogenesis, 
+nucleolus, and
+tRNA processing, and negatively correlated with
+vacuole, cell cortex, and carbohydrate metabolism terms. 
+Together, this analysis suggests that both upshift and
+increased steady-state growth rates share upregulation of
+ribosome-associated components, but the reprogramming
+preceeding the upshift in growth reflects an immediate focus on 
+quantitative changes in
+gene expression machinery instead of structural cellular components.
+Importantly,
+dynamic reprogramming is similar in both the chemostat and batch
+upshift (Fig~\ref{figure1}C). As batch cultures are a technically
+simpler experimental system, we performed all subsequent experiments
+using batch culture nitrogen upshifts. 
+
+\subsection*{Global analysis of mRNA stability changes during the
+nitrogen upshift}
+
+Previously, we found that \textit{GAP1} and \textit{DIP5} mRNAs 
+are destabilized in
+response to a nitrogen upshift \cite{Airoldi2016}. We sought to
+determine if mRNA destabilization is specific to NCR transporter
+mRNAs by measuring global mRNA stability across the upshift
+using 4-thiouracil (4tU) labeling and RNA-seq 
+\cite{Neymotin2014,Munchel2011}.
+As a 4tU labeling experiment requires uracil transport, 
+which may be altered upon stresses or a 
+change in nitrogen-availability \cite{volland1994,Hein1995}, 
+we designed experiments such
+that %following complete 4tU labeling and metabolism to nucleotides
+the chase was initiated prior to addition of glutamine or water (mock).
+We normalized data using \textit{in vitro} synthesized thiolated 
+spike-ins by fitting a log-linear model to spike-in counts
+across time (\nameref{writeup2}), which reduced noise and increased
+our power to detect stability changes (\nameref{dme211raw},
+\nameref{dme211filterDirect},
+\nameref{dme211filterModel}).
+Data and models for each transcript can be visualized in browser
+using a Shiny appplication (
+\url{http://shiny.bio.nyu.edu/users/dhm267/}). 
+
+We modeled the
+log-transformed normalized signal for each mRNA using linear
+regression (\nameref{dme211resultsModel}).
+Of 4,859 mRNAs measured we identified 94 that increased in 
+degradation rate and 38 that decreased (FDR $<$ 0.01, using \cite{Storey2003}).  %inlineciteStorey2003
+We generated a model of nucleotide
+labeling kinetics to assess the effect of an incomplete label 
+chase on our experimental results (\nameref{writeup2}),
+ and found that complete transcriptional inhibition alone could 
+theoretically result in a 13.3\% increase in the apparent 
+degradation rate. In order to eliminate the possibility that
+rapid synthesis changes could affect our estimates,
+we considered transcript destabilization to be at least a
+doubling (100\% increase) in the apparent degradation rates between 
+pre-upshift and post-upshift.
+This conservative cutoff 
+left 78 mRNA that are significantly destabilized 
+upon a nitrogen upshift. 
+
+The vast majority of transcripts (4,781 of 4,859) do not show
+evidence for stability changes upon addition of glutamine
+(e.g. \textit{HTA1}, Fig~\ref{figure2}A). 
+The median pre-upshift half-life is 6.92 minutes and the median
+half-life following the upshift is 6.32 minutes (Table~\ref{table1})
+suggesting that there is not a global change in mRNA stability.
+Global stability estimates are
+considerably lower than previous estimates in rich medium
+\cite{Munchel2011,Neymotin2014,Miller2011}, which may reflect the
+different nutrient conditions used in our study. 
+The 78 transcripts significantly destabilized upon the 
+glutamine-upshift include
+mRNAs encoding NCR transporters \textit{GAP1}, \textit{DAL5}, and
+\textit{MEP2} (blue label, Fig~\ref{figure2}A), the pyruvate metabolism enzymes
+\textit{PYK2} and \textit{PYC1} (orange label), and trehalose synthase
+subunits \textit{TPS1} and
+\textit{TPS2} (yellow label).
+Destabilized mRNA tend to be more stable before the upshift (Fig~\ref{figure2}B),
+(median half-life of 9.46 minutes) and exhibit 
+a median 3.06-fold increase in degradation rates (median half-life of
+3.02 minutes following the upshift). 
+
+\begin{table}[!ht]
+\begin{adjustwidth}{-2.25in}{0in} % Comment out/remove adjustwidth environment if table fits in text column.
+\centering
+\caption{\textbf{Summary of mRNA stability and changes upon the upshift.} Shown here are the median rates or changes in rates for the specified sets. Destabilized transcripts were identified using the criteria of a significant (FDR $<$ 0.01) change in estimated degradation rates and at least a doubling of the rate of clearance.}
+\begin{tabular}{p{8em} | l l l l | l l}
+& \multicolumn{2}{c}{Pre-shift} & \multicolumn{2}{c}{Post-shift} &
+Change in & Fold-change\\
+ & specific rate & half-life & specific rate & half-life & specific
+rate & specific rate\\
+ & (min$^{-1}$) & (min) & (min$^{-1}$) & (min) & (min$^{-1}$) & \\
+\\
+\raggedright All transcripts & 0.100 & 6.92 & 0.110 & 6.32 & 0.00865 &
+1.08\\
+\raggedright Destabilized (n=78) & 0.0732 & 9.46 & 0.229 & 3.02 &
+0.158 & 3.06\\
+\raggedright No difference\\detected (n=4781) & 0.101 & 6.89 & 0.108 &
+6.40 & 0.00728 & 1.07\\
+\end{tabular}
+\label{table1} 
+\end{adjustwidth}
+\end{table}
+
+We tested for
+functional enrichment among the set of 78 destabilized
+mRNAs and found that they are strongly enriched for NCR
+transcripts (16 of 78, p $<$ $10^{-11}$). Almost half of the
+destabilized transcripts are annotated as “ESR-up” genes
+(\nameref{comparisonESR}), on the basis of  their rapid induction
+during the environmental stress response \cite{Gasch2000}. 78
+destabilized mRNAs are enriched (FDR $<$ 0.05) for additional GO terms and KEGG 
+pathways (\nameref{dme211goAndKegg}) including
+glycolysis/gluconeogenesis (6/78 genes), 
+carbohydrate metabolic process (24/78 genes),
+trehalose-phosphatase activity (3/78 genes), 
+pyruvate metabolic process (6/78 genes), 
+and secondary active transmembrane transport
+(8/78 genes, a subset of the enriched 11 ion transmembrane transport genes).
+%We also see destabilization of \textit{PYK2} and \textit{HXK1},
+%both of which are isozymes expressed highly in poor nutrient conditions.
+Thus destabilization upon a nitrogen upshift regulates, 
+but is not restricted to, NCR-regulated mRNAs and reflects broader
+metabolic changes in the cell. 
+
+
+
+
+
+To investigate the extent to which mRNA stability changes contribute
+to transcriptome reprogramming, we compared degradation rates
+to abundance changes\cite{Airoldi2016} following the upshift 
+(Fig~\ref{figure2}C). 
+Changes in mRNA degradation rates %inlineciteAiroldi2016
+and expression change rates are anti-correlated (Pearson's $r$ = -0.598,
+p-value $<$ $10^{-15}$, \nameref{kkdComparison}),
+consistent with stability changes impacting gene expression dynamics.
+However, they are not entirely co-incident, as some destabilized
+transcripts do not exhibit decreases in abundance (red points in
+Fig~\ref{figure2}C, \nameref{comparisonDestabilized},
+and \nameref{compareSix}).
+This analysis indicates that increases in degradation rates play a 
+significant role
+in the rapid reprogramming of the transcriptome upon a glutamine
+upshift, but that in some cases cases they are counteracted by
+increases in mRNA synthesis rates \cite{Shalem2008,Canadell2015}. 
+
+Functional coordination of mRNA stability changes suggests  a possible
+role for \textit{cis}-element regulation. We analyzed UTRs and coding
+sequence for enrichment of new motifs or known RNA binding protein
+(RBP) motifs.
+3’ UTRs of destabilized transcripts are
+depleted of Puf3p binding sites, but we found no enriched sequence
+motif in the 3' UTRs.
+5’ UTRs are enriched for a GGGG motif, which
+may be explained by convergence between mRNA stability changes and
+transcriptional control by Msn2/4 on the ESR “up” genes
+(\nameref{comparisonESR}, \cite{Gasch2000,Canadell2015}).  %inlineciteGasch2000,Canadell2015
+5’ UTRs are also enriched for binding motifs reported for Hrp1p 
+(\nameref{hrp1}),
+a canonical member of the nuclear cleavage factor I complex \cite{Chen1998}.
+However, this protein has been shown to shuttle to the cytoplasm
+where it may play a regulatory role
+\cite{Kessler1997,Kebaara2003,Guisbert2005}.
+On average,
+destabilized mRNAs are longer and contain more optimal codons
+(\nameref{lengthAndCodons}, \cite{Khong2017}).  %inlineciteKhong2017
+Together, this analysis suggests that the
+mechanism of destabilization may act through cis elements in the 5’
+UTR and/or biased codon usage.
+
+\subsection*{A genome-wide screen for \textit{trans}-factors regulating \textit{GAP1} mRNA repression}
+
+We sought to identify \textit{trans}-factors mediating accelerated mRNA
+degradation in response to a nitrogen upshift. We selected \textit{GAP1} 
+as representative of transcript destabilization, as it is abundant in
+nitrogen-limiting conditions and is rapidly cleared upon addition of
+glutamine  (3.24-fold increase in degradation rate, Fig~\ref{figure3}A,
+\nameref{dme211resultsModel}). Previous approaches to high-throughput
+genetics of transcriptional activity have used protein expression
+reporters \cite{Neklesa2009,Sliva2016} or automation of qPCR 
+\cite{Worley2015}. However, for our
+purposes, we required direct measurement of \textit{GAP1} mRNA 
+changes on a rapid timescale.
+Therefore, we applied 
+\underline{s}ingle 
+\underline{m}olecule 
+\underline{f}luorescent 
+\textit{\underline{i}n \underline{s}itu}
+\underline{h}ybridization (smFISH) to quantify 
+native \textit{GAP1} transcripts in yeast cells in the pooled
+prototrophic yeast deletion collection \cite{Vandersluis2014}.
+Using fluorescence activated cell sorting (FACS) and Barseq
+\cite{Smith2009,Robinson2013,Giaever2014},
+we aimed to quantify and model the distribution of \textit{GAP1} mRNA
+in each mutant \cite{Kinney2010,Peterman2016}.
+
+%Development of our screen required that we could detect and
+%sort cells using \textit{GAP1} mRNA signal. 
+We found that
+individually labeled probes tiled across \textit{GAP1} mRNA
+\cite{Raj2008} were insufficiently bright for
+\textit{GAP1} mRNA quantification using flow cytometry (data not shown),
+likely due to the small cell size of nitrogen-limited cells and the
+low transcript numbers in yeast cells compared to mammalian cells
+\cite{Klemm2014}. Therefore, we used branched DNA probes
+(Quantigene), which serve to amplify the FISH signal
+\cite{Hanley2013}. We developed a fixation and permeabilization
+protocol (\nameref{writeup4}) that enabled detection of the
+distribution of  \textit{GAP1} mRNA in steady-state nitrogen-limited conditions
+and its repression following the  upshift (Fig~\ref{figure3}B). In control
+experiments, we found that the signal is eliminated in a \textit{GAP1} deletion strain
+or by omitting the targeting probe % that confers specificity
+(Fig~\ref{figure3}B and \nameref{gap1Delete}). To validate
+sorting, we sorted a sample of cells into quartiles and used
+microscopy to count fluorescent foci per cell
+(Fig~\ref{figure3}C).
+We found that increased flow cytometry signal is associated with an
+increase in the number of foci in the cells (Fig~\ref{figure3}D, $R^2$ = 0.607,
+p $<$ $10^{-11}$). 
+
+Previous SortSeq studies of
+the yeast deletion collection have used outgrowth 
+to generate sufficient material for 
+Barseq \cite{Sliva2016}. However, formaldehyde fixation precludes
+outgrowth. We found that below approximately $10^6$ templates, the
+Barseq reaction produces primer dimers
+that outcompete the intended PCR product (\nameref{writeup4}). 
+Therefore, we re-designed the
+PCR reaction \cite{Robinson2013,Smith2009} to be robust for
+low sample inputs (\nameref{writeup4}). Our protocol
+incorporates a 6-bp \underline{u}nique \underline{m}olecular 
+\underline{i}dentifier (UMI) into the first
+round of extension to identify PCR duplicates, 
+and uses 3’-phosphorylated oligonucleotides and a
+strand-displacing polymerase (Vent exo-) to block primer dimer formation and 
+off-target amplification. 
+%We developed a bioinformatics pipeline 
+%using pairwise alignment
+%for per-read quality-filtering and compatibility with variable barcode
+%length, and using the degenerate UMI barcodes to help account for PCR
+%duplicates. 
+%UMIs to identify duplicates.
+Because strain barcodes are of variable lengths, 
+we developed a bioinformatic pipeline to extract barcodes and UMIs 
+using pairwise alignment to invariant flanking sequences.
+Based on \textit{in silico} benchmarks, this
+approach was robust to systematic and simulated random errors 
+that can confound analysis of the yeast deletion barcodes 
+(\nameref{codeanddata}, \nameref{writeup4}). 
+
+We refer to this experimental approach as BFF 
+(\underline{B}arseq after \underline{F}ACS after \underline{F}ISH). 
+We used BFF to estimate \textit{GAP1} mRNA abundance for every mutant in the
+haploid prototrophic deletion collection \cite{Vandersluis2014} in
+nitrogen-limiting conditions and 10 minutes following the upshift. 
+This approach facilitates identification of mutants with
+defects in mRNA regulation at both the transcriptional and
+post-transcriptional level without altering \textit{GAP1} mRNA 
+\textit{cis}-elements that may affect its regulation. 
+Moreover, this design enables identification of factors that 
+regulate both the steady-state abundance of \textit{GAP1} mRNA and 
+its transcriptional repression following an upshift.
+We analyzed the deletion pool in biological triplicate
+(Fig~\ref{figure4}A). Following barcode sequencing we found that UMIs 
+approached saturation at a slower rate than expected for random sampling,
+consistent with PCR amplification bias 
+(\nameref{rarefaction}), and therefore we used an error
+correction model \cite{Fu2011}. After 
+filtering, we calculated a
+pseudo-events metric that approximates the number of each mutant sorted
+into each bin. 
+Principal components analysis shows that the samples are 
+separated primarily by FACS bin within each
+condition and biological replicates are clustered indicating that our
+approach reproducibly captures the variation of  \textit{GAP1} mRNA flow
+cytometry signal across the library (\nameref{pca}). 
+ 
+\subsection*{Estimating \textit{GAP1} mRNA abundance for individual mutants}
+
+We estimated the distribution of \textit{GAP1} mRNA for each mutant by
+modeling pseudo-events in each quartile as a
+log-normal distribution using likelihood maximization  
+(Fig~\ref{figure4}B). 
+From model fits we estimated the mean expression value for each
+mutant and found that the distribution of means estimated for
+3,230 strains (\nameref{dme209pooledFits}, Fig~\ref{figure4}C) 
+recapitulates the overall
+distribution of flow cytometry signal (Fig~\ref{figure4}A). 
+%Specifically, replicate A had a consistently lower estimate of
+%\textit{GAP1} FISH fluoresence in both flow cytometry and modeling.
+%Replicate C had fewer mutants sorted (\nameref{writeup4}), 
+%reflected in the wider distribution of estimated means.
+%To estimate \textit{GAP1}
+%mRNA per strain, we used all replicate measurement to perform model
+%fitting and filtered models for sufficient measurements  (at least two
+%of three replicates in at least three of the four bins). We generated
+%expression distribution estimates for 3,230 strains, and used the mean
+%of each distribution as the estimate of \textit{GAP1} mRNA abundance for each
+%strain (\nameref{dme209pooledFits}). %added after commented out
+To validate our approach we first examined
+strains for which we expected to have a specific phenotype and
+compared their mean expression level to the distribution of expression
+for the entire population (Fig~\ref{figure4}D). We found that the wildtype
+genotype (\textit{his3}$\Delta$ complemented by the spHis5 allele during
+library construction) has an expression level that is centrally
+located in the distribution both before and following the upshift. The
+\textit{gap1}$\Delta$ genotype is a negative control and 
+we estimate that it is at the extreme
+low end of the distribution before and following the upshift. 
+Dal80p is a direct transcriptional repressor
+of NCR transcripts %like \textit{GAP1}, 
+and we found that the \textit{dal80}$\Delta$ genotype is defective in
+repression of \textit{GAP1} before and after the upshift. 
+Counter-intuitively, deletion of \textit{GAT1}, a transcriptional activator
+of \textit{GAP1}, appears to have higher steady-state expression of
+\textit{GAP1} mRNA.
+However, increased expression of \textit{GAP1} mRNA in a
+\textit{gat1}$\Delta$ background has
+previously been reported \cite{Scherens2006} and is thought to
+result from the complex interplay of NCR transcription factors on
+their own expression levels. 
+Data and models for each mutant strain can be visualized in browser
+using a Shiny appplication (
+\url{http://shiny.bio.nyu.edu/users/dhm267/} ). 
+
+To identify new cellular processes that regulate \textit{GAP1} mRNA abundance, we
+used gene-set enrichment analysis (\nameref{dme209gsea}).
+Following the upshift we found mutants that
+maintain high \textit{GAP1} mRNA expression are enriched for negative
+regulation of gluconeogenesis (\nameref{gluco}) and the
+Lsm1-7p/Pat1p complex (Fig~\ref{figure5}A). Mutants in the TORC1 signalling
+pathway were not enriched; 
+however, we found that a \textit{tco89}$\Delta$ mutant has
+greatly increased \textit{GAP1} mRNA expression before and after the upshift
+(\nameref{tco89}), consistent with the repressive role of TORC1
+on the NCR regulon.
+To compare expression before and after the upshift for each mutant,
+we regressed the post-upshift mean expression against the pre-upshift 
+mean expression for each genotype (\nameref{prePredictPost}). 
+We used the residuals for each
+strain to identify mutants that clear \textit{GAP1} mRNA with kinetics slower
+than expected by this model.
+We found that the Lsm1-7p/Pat1p complex is again strongly 
+enriched for slower than
+expected \textit{GAP1} mRNA clearance (\nameref{dme209pooledFits}). 
+Specifically,
+the \textit{lsm1}$\Delta$, \textit{lsm6}$\Delta$, and 
+\textit{pat1}$\Delta$ strains have highly elevated \textit{GAP1}
+mRNA expression before the upshift and are strongly impaired in the 
+repression of \textit{GAP1} mRNA after the upshift (Fig~\ref{figure5}A). 
+
+As these factors are associated with processing-body dynamics, 
+we tested if microscopically-observable processing-bodies form or
+disassociate during the upshift, using microscopy of Dcp2-GFP. 
+We did not observe qualitative changes
+in Dcp2-GFP distribution (\nameref{pbodyScope}),
+and thus the upshift does not
+result in a microscopically visible changes in processing-body foci.
+%as seen in other stresses. 
+This is consistent with previous
+investigations of amino-acid limitation stress \cite{Hoyle2007} and
+suggests that the defects in \textit{GAP1} mRNA clearance 
+in mutants defective in the Lsm1-7p/Pat1p complex
+likely result from their roles in decapping or associated processes.
+
+
+
+To confirm the role of the Lsm1-7p/Pat1p  complex in clearing \textit{GAP1}
+mRNA during the nitrogen upshift we measured \textit{GAP1} mRNA
+repression using qPCR measurements normalized to
+\textit{HTA1}, which is not subject to destabilization upon the upshift
+(Fig~\ref{figure2}A). We also tested mutants that were not detected using BFF,
+or were only detected in the highest \textit{GAP1} bin and therefore
+not suitable for modeling
+(e.g. \textit{xrn1}$\Delta$ \nameref{tco89}). 
+Using this assay we found that the main 5’-3’ 
+exonuclease \textit{xrn1}$\Delta$ 
+and mRNA deadenylase complex (\textit{ccr4}$\Delta$ and
+\textit{pop2}$\Delta$) are impaired in \textit{GAP1} mRNA repression 
+(Fig~\ref{figure5}B).
+We also found that qPCR confirmed results from the BFF assay.
+We confirmed that the accelerated degradation of \textit{GAP1} mRNA is impaired
+in \textit{lsm1}$\Delta$ and \textit{lsm6}$\Delta$ 
+(Fig~\ref{figure5}C). 
+We tested
+\textit{scd6}$\Delta$ and \textit{edc3}$\Delta$, two modifiers of the
+decapping or processing-body
+assembly functions associated with this complex, and found two
+distinct phenotypes (Fig~\ref{figure5}D). \textit{edc3}$\Delta$ has similar expression 
+as wild-type before the upshift, but clears \textit{GAP1} mRNA much more slowly.
+\textit{scd6}$\Delta$ has greatly reduced \textit{GAP1} mRNA expression
+before the upshift but is impaired in \textit{GAP1} mRNA clearance. 
+Interestingly, \textit{tif4632}$\Delta$, a deletion of eIF4G2
+known to interact with Scd6p \cite{Rajyaguru2012}, 
+exhibits a similar phenotype. 
+
+Identification of an initiation factor subunit mutant with defects in
+\textit{GAP1} mRNA clearance suggests that translation control may
+impact stability changes. Therefore we deleted the 5' UTR
+and 3' UTR of \textit{GAP1}. 
+%100bp and 152bp upstream of the start codon (approximate 5’ UTR) or the
+%100bp downstream of the stop codon (approximate 3’ UTR), 
+Whereas the 3’ UTR deletion does not have an effect, the 5’ UTR deletion
+exhibits the phenotype of reduced \textit{GAP1} mRNA before the upshift
+and a reduced rate of transcript clearance following the upshift
+(Fig~\ref{figure5}E). 
+We observed a similar phenotype with an independent deletion of 
+152bp upstream of the \textit{GAP1} start codon (\nameref{bothutr}). 
+%These measurements suggest altered mRNP composition of the
+%Lsm1-7p/Pat1p complex and associated decapping factors are associated
+%with defects in \textit{GAP1} mRNA expression dynamics upon a 
+%nitrogen upshift. Importantly the phenotype of the \textit{scd6}$\Delta$, 
+%\textit{tif4632}$\Delta$, or 5’ sequence deletions preceed the 
+%addition of glutamine, suggesting that the observed destabilization
+%of \textit{GAP1} may be the halt of a stabilization effect, perhaps
+%due to changes in translational status of \textit{GAP1}.
+These results indicate that \textit{cis}-elements responsible for the
+rapid clearance of \textit{GAP1} mRNA are unlikely to be located in the
+3' UTR and instead may be present in the 5' end of the
+mRNA.
+
+\section*{Discussion}
+
+Regulated changes in mRNA stability allows cells to rapidly reprogram
+gene expression, clearing extant transcripts that are no longer
+required and potentially reallocating translational capacity.
+%Despite progress in understanding the pathways that mediate
+%mRNA degradation, the functional role of mRNA degradation and the
+%factors that control regulated changes in mRNA stability remain poorly
+%understood. 
+Pioneering work in budding yeast has shown that mRNA
+stability changes facilitate gene expression remodeling in response to
+changes in nutrient availability including changes in carbon sources
+\cite{Scheffler1998} and iron starvation \cite{Puig2005}. 
+Here, we characterized genome-wide changes
+in mRNA stability in response to changes in nitrogen availability and
+identified factors that mediate the rapid repression of the
+destabilized mRNA, \textit{GAP1}. Our study extends our previous work
+characterizing the dynamics of transcriptome changes using chemostat
+cultures \cite{Airoldi2016} and shows that accelerated mRNA
+degradation targets a specific subset of the transcriptome in response
+to changes in nitrogen availability. We developed a novel approach to
+identify regulators of mRNA abundance using pooled mutant screens and
+find that modulators of decapping activity, and core degradation
+factors, are required for accelerated degradation of 
+\textit{GAP1} mRNA. 
+ 
+Measuring the stability of the transcriptome requires the ability to
+separate pre-existing and newly synthesized transcripts. We modified
+existing methods to measure 
+post-transcriptional regulation of the yeast transcriptome in a
+nitrogen upshift using 4-thiouracil labeling
+\cite{Miller2011,Neymotin2014,Munchel2011}. These
+modifications entailed improved normalization and quantification of
+extant transcripts and explicit modeling of labelling dynamics to
+account for some of the inherent limitations of metabolic labeling
+approaches \cite{Perez-Ortin2013}. Continued development of
+fractionation biochemistry \cite{Duffy2015}  and incorporation of
+explicit per-transcript efficiency terms will improve these
+methods further \cite{Chan2017}.
+
+Our experiments show that the process of physiological and gene
+expression remodeling occur on very different timescales in response
+to a nitrogen upshift. Cellular physiology is remodeled over the
+course of two hours to achieve a new growth rate.
+By contrast, transcriptome remodeling occurs rapidly and through
+states that are distinct from 
+those observed during systematic
+increases in steady-state growth rates. 
+%Interestingly,
+%we found that the yeast transcriptome is on average less stable in
+%both nitrogen poor conditions (6.89 min) and following the upshift
+%(6.40 min) compared to rich media conditions reported in other studies
+%using metabolic labeling
+%\cite{Munchel2011,Neymotin2014,Miller2011}. This relative
+%reduction in mRNA stability could be an adaptation to potentially
+%limiting ribonucleotides, but further work exploring differences in
+%mRNA degradation rates during growth limited by different nutrients is
+%required to test this concept \cite{Garcia-Martinez2016}.
+%Stability changes upon the nitrogen upshift generally exhibited the
+%expected relationship with rates of abundance change (
+%anti-correlation, $R^2=$-0.376 ); however, we found multiple cases in
+%which increased mRNA degradation rates did  not result in rapid
+%decreases in mRNA abundance. This has been observed for transcripts
+%up-regulated in stress conditions, and has been proposed as a
+%mechanism to effect a rebalancing of the transcriptome after a
+%transient phase of reprogramming \cite{Shalem2008}. Importantly,
+%the changes in mRNA stability that we detect are nearly coincident
+%with the environmental perturbation suggesting that a signal is sensed
+%and the effect propagated to impact post-transcriptional regulation
+%with rapid kinetics.
+We have previously shown the rapid dynamics of NCR regulon repression 
+upon a nitrogen upshift \cite{Airoldi2016}. Our results here
+indicate that accelerated degradation of 
+%at least 16 of the 77 probable 
+many NCR transcripts \cite{Godard2007} contributes to this
+repression. 
+%A three-fold increase in
+%the degradation rate of \textit{GAP1} mRNA provides an additional layer of
+%repressive control. 
+Importantly, our results show that accelerated
+degradation is not limited to NCR transcripts but also targets
+transcripts enriched in carbon metabolism pathways, particularly
+pyruvate metabolism. Conversely, we also detect an apparent reduction in the 
+degradation rate for some transcripts 
+%enriched in ribosome biogenesis mRNAs (for example \textit{NSR1}) as well as 
+including \textit{MAE1}. \textit{MAE1} encodes
+an enzyme responsible for the conversion of malate to pyruvate, and
+combined with the accelerated degradation of \textit{PYK2} mRNA 
+may reflect the adoption of an adaptive shunt of carbon skeletons from glutamine 
+to alanine via the TCA cycle \cite{Boles1998}. 
+%Due to the limitations of
+%labeling approaches \cite{Perez-Ortin2013} we cannot conclude 
+%here that these transcripts are indeed stabilized, 
+%however we can conclude that they are strongly upregulated. 
+A recent study %inlineciteTesniere2017
+described destabilization  of carbon metabolism mRNAs after repletion
+of nitrogen following 16 hours of starvation \cite{Tesniere2017}. We do
+not detect destabilization of \textit{PGK1} mRNA in our study and note that
+the basal half-life of 6.2 minutes estimated in our study is similar
+to the accelerated rate reported by \cite{Tesniere2017}. %inlineciteTesniere2017
+
+%To identify the factors that underlie accelerated mRNA degradation, we
+%developed a global \textit{trans}-factor screen using mRNA FISH, FACS, and
+%sequencing. 
+%BFF identified mutants in the Lsm1-7p/Pat1p
+%complex as having elevated \textit{GAP1} mRNA levels both before and after the
+%upshift.
+%Given that the \textit{GAP1} mRNA is destabilized during this
+%transition we suspect that these core mRNA degradation factors are
+%directly involved. 
+%Because factors associated with the Lsm1-7p/Pat1p
+%complex are also involved in processing-body formation we looked for
+%processing-body dynamics during the nitrogen upshift, but did not see
+%qualitative changes in Dcp2-GFP distribution (raw data available in
+%supplement). However, it has been proposed that pre-existing mRNPs
+%seed the formation of processing-bodies \cite{Lui2014}, thus the
+%phenotype may require assays at a finer spatial scale to eliminate
+%this possibility \cite{Rao2017}. Interestingly, during
+%cross-comparisons with a recent dataset exploring mRNA localization to
+%RNP condensates \cite{Khong2017} we found that the set of
+%destabilized transcripts in the label-chase experiment are on average
+%longer in CDS and have an increased codon-optimality, two factors that
+%were shown to be associated with differences in stress-granule
+%localization of mRNA \cite{Khong2017}. 
+
+%Regulated changes in mRNA stability can be mediated by RBP binding the
+%3’ UTR of specific transcripts.  However, cis element analysis are
+%inconsistent with a role for known RBPs in the observed
+%destabilization. In particular, Puf3p motifs are de-enriched from the
+%destabilized set. We failed to detect new 3’ UTR sequence motifs that
+%are enriched in destabilized transcripts, but these 
+Destabilized
+transcripts are enriched for a binding motif of Hrp1p in
+the 5’ UTR. This essential component of mRNA cleavage for
+poly-adenylation in the nucleus has also been shown to shuttle to the
+cytoplasm and bind to amino-acid metabolism mRNAs
+\cite{Guisbert2005}. In addition, \textit{HRP1} has been shown to 
+interact genetically to
+mediate nonsense-mediated decay (NMD) of a \textit{PGK1} mRNA harboring a
+premature stop-codon \cite{Gonzalez2000} or a \textit{cis}-element spanning
+the 5’ UTR and first 92 coding bp of \textit{PPR1} mRNA \cite{Kebaara2003}.
+A potential role for Hrp1p sites in the 5' UTR of destabilized mRNAs
+warrants further investigation. 
+
+Using BFF we identified mutants in the Lsm1-7p/Pat1p
+complex as having elevated \textit{GAP1} mRNA levels both before and after the
+upshift, consistent with their central role in mRNA 
+metabolism. Out experiments using \textit{GAP1} normalized to
+\textit{HTA1} demonstrate that increased mRNA abundance before the upshift is
+likely a global effect (Fig~\ref{figure5}C). 
+However, these mutants have a defect in clearance of \textit{GAP1}
+mRNA upon the upshift, pointing to their function as mRNA clearance factors.
+%and the assay demonstrates that associated decapping factors 
+%\textit{EDC} and \textit{SCD6} have specific effects (Fig~\ref{figure5}D).
+%Given that the \textit{GAP1} mRNA is destabilized during this
+%transition we suspect that these mRNA degradation factors are
+%directly involved. 
+%While we found that the \textit{edc3}$\Delta$ mutant has defects in
+%clearance of \textit{GAP1}, we also 
+Additionally, we found that \textit{edc3}$\Delta$, 
+\textit{scd6}$\Delta$,
+%mutant shares a phenotype of reduced \textit{GAP1} mRNA
+%expression during nitrogen limitation and reduced rate of \textit{GAP1} mRNA
+%clearance with a 
+and \textit{tif4632}$\Delta$ have impaired \textit{GAP1} mRNA clearance.
+As these factors are involved in translational regulation they suggest
+a role for this process in the differential stability of \textit{GAP1} mRNA
+(Fig~\ref{figure5}D).
+Deletion of the 5' UTR
+of \textit{GAP1} also impairs its clearance (Fig~\ref{figure5}E). 
+The 5' UTR deletions do not include the TATA box (ending at -179) or
+GATAA sites (nearest at -237) responsible for NCR GATA-factor
+regulation of \textit{GAP1} \cite{Stanbrough1996}.
+Decreased steady-state expression of \textit{GAP1} mRNA in 5' UTR
+mutants suggests that interactions of
+factors with \textit{cis}-elements in the 5’ UTR might be responsible for
+stabilizing \textit{GAP1} mRNA during nitrogen limitation, although the 
+truncation of the 5' sequence may be enough to inhibit translation 
+initiation by virtue of the shorter length \cite{Arribere2013}.
+Elements in the 5’ UTR have
+been demonstrated to modulate \textit{GAL1} mRNA stability
+\cite{Baumgartner2011} and destabilize \textit{SDH2} mRNA upon glucose
+addition, perhaps due to the competition between translation
+initiation and decapping mechanisms \cite{De_la_Cruz2002}.
+Interestingly, both \textit{GAP1} and \textit{SDH2} 
+share the feature of a second start
+codon downstream of the canonical start \cite{Neymotin2016} and
+we have previously found that mutation of
+the start codon of \textit{GAP1} results in lower
+steady-state mRNA abundances \cite{Neymotin2016}.
+This
+%in light of recent analyses further highlighting the contribution of
+%translation dynamics to mRNA stability 
+%\cite{Presnyak2015,Neymotin2016,Cheng2017}, 
+suggests a mechanism of degradation through dynamic changes in 
+translation initiation that triggers decapping of \textit{GAP1} 
+and other mRNA. 
+%However, the deletion of \textit{SCD6} would be
+%expected to promote translation of mRNA on the basis of it’s measured
+%repressive activity in cell extracts, suggesting that if Scd6p does play a role
+%that it may be specified by some condition-specific modulation of its
+%activity \cite{Rajyaguru2012,Poornima2016}. 
+Future work interrogating
+this possible interaction of translational status and mRNA
+stability during dynamic conditions could also expand our understanding of
+the relationship between these two processes.
+
+To our knowledge, this is the first time mRNA abundance has
+been directly estimated using a SortSeq approach, although 
+%sorting on indirect markers or 
+using mRNA FISH and FACS to enrich subpopulations of cells has been
+previously reported \cite{Klemm2014,Hanley2013,Sliva2016}. This
+approach could be used with other barcoding mutagenesis technologies,
+like transposon-based or Cas9 mediated perturbations, to
+systematically test the genetic basis of transcript dynamics.
+%phenotypes. A strategy combining this technology with transcriptomics
+%as a high-dimensional marker could accelerate unbiased investigation
+%of cellular signalling pathways \cite{Gapp2016}. Additionally, 
+The use of branched-DNA mRNA FISH, or other methods
+\cite{Rouhanifard2017}, allows for mRNA abundance estimation without
+requiring genetic manipulation which makes it suitable for a variety
+of applications. 
+%While the cell wall
+%of yeast makes optimization crucial to this assay, future development
+%of hybridization protocols may improve accuracy and make the assay
+%more robust \cite{Richter2017,Wadsworth2017}. 
+Furthermore, our methods for library construction from limited material
+should permit accurate
+quantification of pooled barcode libraries with small inputs, 
+expanding the possibilities for flow cytometry markers to fixed-cell assays.
+
+Why is \textit{GAP1} subject to multiple layers of repression upon
+a nitrogen upshift, 
+including at the level of transcript synthesis, transcript degradation,
+protein maturation, and post-translational inactivation? Given the
+strong fitness cost of inappropriate activity \cite{Risinger2006},
+this overlap could ensure mechanistic redundancy for robust repression in
+the face of phenotypic or genotypic variation. Alternatively, it could
+reflect a systematic need to free ribonucleotides or
+translational capacity, or some as yet uncharacterized
+process.
+%, or could simply be an effect of some unrelated function. 
+%While this question remains open,
+%we have made progress towards this goal by identifying 
+%factors required for its accelerated degradation.
+%of decapping associated with the Lsm1-7p/Pat1p complex play a role. 
+Future work aimed at determining the adaptive basis of accelerated
+mRNA degradation will serve to illuminate the functional role of
+post-transcriptional gene expression regulation.
+%dissecting this
+%mechanism and contrasting the dynamic process of mRNA destabilization
+%during other growth transitions would greatly inform our understanding
+%of mRNA stability specification at steady-state, possibly in light of
+%the relationship between translation and stability of mRNAs. 
+
+\section*{Materials and methods}
+
+\subsection*{Availability of data and analysis scripts}
+
+\label{codeanddata}
+
+Computer scripts used for all analyses are available as a git repository
+on GitHub
+(\texttt{\url{https://github.com/darachm/millerBrandtGresham2018}}),
+sequencing fastq files are available in the Short Read Archive 
+(SUB3942373),
+and all data along with intermediate analysis files are available in 
+zip archives archived in the Open Science Framework 
+(\texttt{\url{https://osf.io/7ybsh/}}).
+With these archives, all analyses downstream of alignments
+can be re-run completely using the provided GNU Makefile.
+A Shiny application is also available to explore the two main 
+datasets in this paper at
+\url{http://shiny.bio.nyu.edu/users/dhm267/}. It
+is also included in the OSF repository as a separate zipped 
+archive for local installation and long-term archiving. 
+Consult the \texttt{README.md} file in the git repository for more 
+specific instructions, and the \texttt{html\_reports.zip} archive
+for Rmarkdown-generated reports of all R analyses used.
+
+\subsection*{Media and upshifts of media}
+
+The nitrogen-limited media used is a minimal media
+supplemented with various salts, metals, minerals, vitamins, and
+2\% glucose, as previously described \cite{Airoldi2016,Brauer2008}. 
+For proline limitation, 
+the media was made with 800μM L-proline as the sole
+nitrogen source.
+YPD media was made using standard recipes \cite{Amberg2005}.
+All growth was at 30$^{\circ}$C, in an air-incubated 200rpm shaker  
+using baffled flasks with foil caps, or roller drums for 
+overnight cultures in test tubes.
+For glutamine upshift experiments, 
+400μM L-glutamine was added from a 100mM stock solution dissolved 
+in MilliQ double-deionized water and filter sterilized.
+All upshift experiments were
+performed at a cell density of 1-5 million cells per mL,
+in nitrogen-limited media in which untreated cultures 
+saturate at approximately 30 million cells per mL. 
+For all experiments, 
+a colony was picked from a YPD plate and grown in a 5mL
+nitrogen-limited (proline)
+pre-culture overnight at 30$^{\circ}$C, then innoculated into
+the experimental culture from mid-exponential phase.
+
+\subsection*{Strains}
+
+See \nameref{strains} for details.  
+The wild-type strain used is FY4, a S288C derivative. 
+The pooled deletion collection is as published
+\cite{Vandersluis2014}. %inlineciteVandersluis2014
+For all experiments with single strains, colonies were struck 
+from a -80$^{\circ}$C frozen stock onto YPD (or YPD+G418 for
+deletion strains) to isolate single colonies.
+For pooled experiments we inoculated directly into nitrogen-limited
+(proline) media
+from aliquots of frozen glycerol stocks.
+
+Strains with deletions 5' of the start codon and 3' of the stop
+codon were generated by the "delitto-perfetto" 
+method \cite{Storici2006}, 
+by inserting the pCORE-Kp53 cassette
+at either the 5' or 3' end of the coding sequence, then transforming
+with a short oligo product spanning the deletion junction and
+counter-selecting against the cassette using Gal induction of p53.
+Strains were generated and confirmed by Sanger sequencing,
+and traces are available in directory \texttt{data/qPCRfollowup/} 
+within the data zip archive (\nameref{codeanddata}).
+
+\subsection*{Measurement of growth during upshift}
+
+A single colony of FY4 was inoculated in 5mL nitrogen-limited
+(proline)
+media and grown to exponential phase, then back diluted in
+nitrogen-limited (proline) media
+in a baffled flask. 
+Samples were collected into an eppendorf, sonicated,
+diluted in isoton solution, and analyzed with a Coulter Counter Z2
+(Beckman Coulter).
+%within approximately 5 minutes 
+%of collection from flask. Output files were read and processed by a 
+%script (in the git repository) to yield counts per diameter bin, 
+%and minimum size particle 
+%gating was used with blank controls to exclude measurement noise.
+%<!--We are only presenting one replicate, as similar results  
+%have been obtained many times by our lab and 
+%we chose to generate a rapidly sampled time course to best represent 
+%the upshift. Seriously, people have seen this since Slator 1918.
+%-->
+
+\subsection*{Re-analysis of microarray data} 
+
+%Supplemental files from \cite{Airoldi2016} were  %inlineciteAiroldi2016
+%downloaded, read
+%into \texttt{localc} (an open-source spreadsheet software), 
+%a small Excel-generated auto-correction error was 
+%fixed ("Oct-1" -> "OCT1"), and the file saved as a CSV. Microarray 
+%intensity ratios were processed with 
+Gene expression data \cite{Airoldi2016} were analyzed using
+\texttt{pcaMethods} \cite{Stacklies2007} to perform a SVD PCA on scaled data. 
+
+\subsection*{qPCR}
+
+Samples were collected before, during the first ten minutes of
+the nitrogen upshift (Fig~\ref{figure3}),
+or at ten minutes after the upshift (Fig~\ref{figure5}).
+For the experiments described in Fig~\ref{figure5}, all work
+was done in biological replicates.
+Each 10mL sample was collected by vacuum onto a 25mm nylon filter
+and frozen in liquid nitrogen.
+RNA was extracted by adding 400μL of TES buffer
+(10mM Tris (7.5pH), 10mM EDTA, 0.5\% SDS)
+and 400μL of acid-phenol, vortexing vigorously and incubating at 
+65$^{\circ}$C for an hour with vortexing every 20 minutes. 
+For Fig~\ref{figure3} only, at the beginning of this extraction incubation
+we added 10μL of a 0.1ng/μL in-vitro synthesized spike-in 
+mRNA BAC1200 (as generated
+for the label-chase RNAseq (\nameref{writeup2}), 
+but without 4-thiouridine). 
+All samples were separated by centrifugation and extracted again 
+with chloroform on a 2mL phase-lock gel tube (5Prime \#2302830). 
+After ethanol precipitation of the aqueous layer, 
+RNA was treated DNAse RQ1 (Promega M610A) according to manufacturer
+instructions, then the reaction heat-killed at 65$^{\circ}$C for 
+10 minutes after adding a mix of 1:1 0.5M EDTA and RQ1 stop-solution.
+The resulting RNA was
+cleaned with a phenol-chloroform extraction and ethanol 
+precipitated.
+All samples were hybridized with RT primers by incubating the mixture at 80$^{\circ}$C for 
+5 minutes then on ice for 5 minutes.
+For Fig~\ref{figure3} 2μg RNA was primed with 2.08ng/μL
+random hexamers (Invitrogen 51709) and 
+2.5mM total dNTPs (Promega U1511),
+while for Fig~\ref{figure5} 1μg RNA was primed with 
+5.6mM Oligo(dT)18 primers (Fermentas FERSO132) and
+0.56mM total dNTPs (Promega U1511).
+These mixtures were combined with 1/10th 10x M-MulvRT buffer (NEB M0253L), 
+1/20th volume RNAse-OUT (Invitrogen 51535), and 1/20th volume M-MulvRT (NEB M0253L). 
+A negative control with no reverse-transcriptase enzyme was also prepared
+and analyzed in the qPCR reaction.
+The reaction proceeded for 1 hour at 42$^{\circ}$C, 
+then was heat-killed at 90$^{\circ}$C
+before diluting 1/8 with hyclone water (GE SH30538). 
+This dilution was used as direct
+template in 10μL reactions with SybrGreen I Roche qPCR master-mix
+(Roche 04 707 516 001) for measurement on a Roche Lightcycler 480. 
+For Fig~\ref{figure3}, we used primers 
+DGO230 and DGO232 to quantify \textit{GAP1} and 
+primers DGO605 and DGO606 to quantify the synthetic spike-in BAC1200.
+For Fig~\ref{figure5}, we used primers
+DGO229 and DGO231 to quantify \textit{GAP1} and
+primers DGO233 and DGO236 to quantify \textit{HTA1}.  
+See \nameref{primers} for sequences.
+These were run on a Roche480 Lightcycler, 
+with a max-second derivative estimate
+of the cycles-threshold (the $C_p$ value output by analysis) used 
+for analysis by scripts included in the git repo 
+(\nameref{codeanddata}).
+Linear regression of the log-transformed values was used to quantify
+the dynamics and assess significance of changes in expression
+levels or rates of change.
+
+\subsection*{Microscopy}
+
+Cells hybridized with \textit{GAP1} mRNA FISH Affymetrix probes (as 
+described in detail in \nameref{writeup4}) were sorted 
+with a BD FACSAria II based on emission area from a
+660/20nm filter with a 633nm laser activation
+into four gates for the 3-minute post-shift timepoint. 
+These were sorted using PBS sheath fluid at room-temperature into
+poly-propylene FACS tubes, vortexed and applied to
+poly-L-lysine-treated coverslips. 
+Images were acquired on a DeltaVision scope, with FISH fluorescence 
+detected in the "Cy5" channel (632/22nm excitation, 676/34nm emission)
+and the "Visible" light collected as bright-field illumination 
+captured with a polarized objective. Raw images available in the
+"microscopy" zip archive (\nameref{codeanddata}).
+
+\subsection*{Microscopy of Dcp2-GFP}
+
+To look for processing-body dynamics in response to
+a nitrogen upshift, we used strain DGY525, which is FY3
+containing plasmid pRP1315 (gift from Roy Parker).
+Samples were collected before and following a nitrogen upshift
+(4, 10, 12, 19, or 25 minutes),
+from exponential growth in YPD, or 10 minutes after resuspending
+YPD-grown cells in DI water.
+All samples were collected by centrifugation at 10,000g for 30 seconds, 
+aspirating most supernatant, then centrifugation for 20 seconds
+and aspirating all media. Each pellet was 
+immediately resuspended in 4\% PFA 
+(diluted from EMS 16\% PFA ampule RT15710) 
+with 1x PBS ( NaCl 8g/L, KCl 0.2g/L, Na$_2$HPO$_4$ 1.42g/L, 
+KH$_2$PO$_4$ 0.24g/L) 15 minutes on bench, 
+then spun at 10,000g for 1 minute, aspirated, 
+then washed once and resuspended with 1x PBS. 
+Samples were kept on ice, then put onto a coverslip
+for imaging on a DeltaVision scope. Raw images available in the
+microscopy zip archive (\nameref{codeanddata}).
+
+\subsection*{4tU label-chase and RNA sequencing}
+
+The methods and analysis are detailed in \nameref{writeup2},
+including protocols and manufacturer information,
+and all data and code are available as described
+(\nameref{codeanddata}).
+
+FY4 was grown in nitrogen-limitation conditions overnight 
+with a 50μM:50μM mixture of 4-thiouracil:uracil.
+This culture was split, then 4mM uracil was added to chase the
+4-thiouracil label (a 41-fold excess of uracil).
+30mL samples of the culture were taken by filtration onto 25mm
+nylon filters and flash-frozen in eppendorfs. 
+After letting the chase proceed for 12.5 minutes, 
+we added glutamine from 
+a 100mM stock (dissolved in water) to a final concentration 
+of 400μM to one flask, or an equal amount of water to the 
+control flask. 
+Samples were extracted using a hot acid-phenol method,
+with equal volume of synthetic spike-ins  added to each RNA 
+extraction reaction.
+4tU-containing spike-ins (polyadenylated coding sequences from
+\textit{B. subtilus} and \textit{C. elegans}) were synthesized
+\textit{in-vitro} as previously described \cite{Neymotin2014}. 
+RNA was reacted with 
+MTSEA-biotin to conjugate biotin to the 4-thiouracil-containing
+RNA, then purified using streptavidin beads.
+Fractionated RNA was depleted of rRNA using a RiboZero kit.
+RNA samples were converted into Illumina sequencing libraries using
+a strand-specific (UNG) protocol, ligating adapters that contain
+UMI's \cite{Hong2017}.
+Libraries were pooled and sequenced by the NYU Genomics
+Core sequencing facility on an Illumina NextSeq.
+Following base-calling and sample demultiplexing by NYU GenCore,
+the sequencing reads were trimmed using 
+\texttt{cutadapt} \cite{Martin2011}
+aligned using \texttt{tophat2} \cite{Kim2013} to a reference genome
+that included the yeast reference genome (assembly R64-2-1) and
+spike-ins, filtered for mapping-quality and length using
+\texttt{samtools} \cite{Li2009}, deduplicated 
+with \texttt{umi\_tools} \cite{Smith2017}
+and feature counting was performed using 
+\texttt{htseq-count} \cite{Anders2015}.
+Feature counts for yeast mRNAs were normalized to synthetic spike-ins, 
+using the fitted values from a log-linear model of spike-in abundance
+increase (see Results, and \nameref{writeup2}).
+The rate of mRNA degradation and changes in this rate
+was quantified assuming an exponential model 
+(\nameref{writeup2}) and fit as a linear model to log 
+transformed data.
+Significant changes in mRNA degradation rates were defined using 
+a FDR \cite{Storey2015} less than 0.01 and a doubling in degradation
+rate (based on modeling detailed in \nameref{writeup2}).
+
+\subsection*{Label-chase RNA sequencing \textit{cis} element analysis}
+
+To detect if \textit{de novo} or known \textit{cis} elements were 
+associated with destabilization upon a nitrogen upshift,
+we used 
+DECOD \cite{Huggins2011}, FIRE \cite{Elemento2007},
+TEISER \cite{Goodarzi2012}, and the \#ATS pipeline \cite{Li2010}. 
+We also scanned for association with
+RBP binding sites from the CISBP-RNA database
+\cite{Ray2013} using AME from the MEME suite
+\cite{McLeay2010}. 
+Final plots in the supplement were made using motif scans with 
+GRanges \cite{Lawrence2013}.
+Analysis was done using coding sequence and 
+four different definitions of untranslated regions 
+(200bp upstream of the start codon or downstream of the stop codon, 
+the largest detected isoform in TIF-seq data \cite{Pelechano2014},
+or the most distal detected gPAR-CliP sites in exponential-phase 
+or nitrogen-limited growth \cite{Freeberg2013}).
+
+\subsection*{Barseq after FACS after mRNA FISH (BFF)}
+
+The methods and analysis are detailed in \nameref{writeup4},
+including motivation, protocols, and manufacturer information.
+
+An aliquot of the prototrophic deletion collection
+\cite{Vandersluis2014} was thawed and diluted, with 
+approximately 78 million cells added to 500mL of nitrogen-limited
+(proline) media 
+in a 1L baffled flask. The culture was shaken at 30$^{\circ}$C overnight, 
+then split into three flasks (A, B, and C). 
+After three hours (at mid-exponential)
+we collected samples of 30mL culture filtered onto a 25mm filter and
+flash-frozen in an eppendorf in liquid nitrogen. 
+We sampled in steady-state growth (pre-upshift) and  
+10.5 minutes after adding 400μM glutamine (post-upshift).
+Samples of the pool were fixed with formaldehyde
+(4\% PFA diluted in PBS from 10mL aliquot, 
+buffered, 2 hours room-temperature) and digested
+with lyticase (in BufferB with VRC 37$^{\circ}$ 1 hour), 
+\cite{Mcisaac2013}, and permeabilized with ethanol at
+4$^{\circ}$ overnight.
+Samples were processed with a Affymetrix Quantigene Flow RNA kit 
+(product code 15710) designed to target
+\textit{GAP1} mRNA and labelled with Alexa 647.
+The hybridization was performed using a modified
+version of the manufacturer's protocol (Appendix
+\nameref{writeup4}, including a DAPI staining step.
+Samples were sonicated, then run through a BD FACSAria II.
+Cells were gated for singlets and DAPI content 
+(estimated 1N or more), then sorted based on signal detected with a
+%emission area from a
+660/20nm filter with a 633nm laser activation
+into four gates within each timepoint. %, across replicates.
+Cells were sorted using PBS sheath fluid at room-temperature, into
+poly-propylene FACS tubes, then stored at -20$^{\circ}$C.
+For each gate, cells were collected via centrifugation and genomic
+DNA extracted by NaCl reverse-crosslinking at 65$^{\circ}$C,
+inspired by \cite{Klemm2014}, with %inlineciteKlemm2014
+subsequent proteinase K and RNase A digestions.
+Genomic DNA was split into three reactions and assayed using a 
+modified barseq protocol (\nameref{writeup4}).
+See the supplementary write-up \nameref{writeup4} for 
+detailed protocols and rationale. %, and a discussion of dimers.
+Barseq libraries were submitted to the NYU Genomics Core 
+for sequencing using a 1x75bp run on a Illumina NextSeq.
+
+\subsection*{Analysis of BFF sequencing results}
+
+We devised a pipeline to quantify barcodes using the UMI sequence 
+incorporated in the first round of
+amplicon priming, and benchmarked on \textit{in silico}
+simulated datasets (\nameref{writeup4}).
+Briefly, raw FASTQ files are processed with SLAPCHOP
+(\url{https://github.com/darachm/slapchop}) 
+which uses pair-wise alignment
+\cite{Cock2009} to filter, extract UMIs from 
+variable positions, and extract barcodes. % into different fields.
+We demultiplexed using a perl script, and aligned 
+strain barcodes to a reference barcode index \cite{Smith2009} 
+using \texttt{bwa mem} \cite{Li2013}. Barcodes were counted
+and then we used UMIs with the label-collision correction of 
+\cite{Fu2011} to quantify the proportion of each mutant in the %inlineciteFu2011
+sample. These relative counts and the FACS data
+(the sorted events per bin) were used to estimate the distribution 
+of each mutant across the four gates in each timepoint.
+We filtered for strains detected in at least three bins,
+and fit a log-normal distribution using \texttt{mle} in R
+\cite{Team2000}. The mean of this distribution %inlineciteTeam2000
+was used as the expression value of \textit{GAP1} mRNA in plots and
+GSEA analysis using \texttt{clusterProfiler} \cite{Yu2012}.
+
+\clearpage
+
+\section*{Figure captions}
+
+\begin{figure}[!ht]
+  \caption{
+%\includegraphics[width=\textwidth]{output/Figure1.png}
+  \textbf{Dynamics of physiology and transcriptome remodeling
+  during a nitrogen upshift.}
+  \textbf{A)} 
+  400μM glutamine was added to a
+  culture of yeast cells growing in minimal media containing 800μM
+  proline as a sole nitrogen source. Measurements
+  of culture density across the upshift are plotted. 
+  Dotted lines denote linear regression of the
+  natural log of cell density against time before the upshift and 
+  after the 2 hour lag. \textbf{B)} Average cell size during the
+  same experiment.
+  Dotted lines denote the mean cell diameter before the upshift
+  and after the 2 hour lag. 
+  \textbf{C)} PCA analysis of global
+  mRNA expression in steady-state chemostats and following an upshift
+  \cite{Airoldi2016}. Steady-state nitrogen-limited chemostat
+  cultures maintained at different growth rates (colored circles)
+  primarily vary along principal component 2. Expression following a
+  nitrogen-upshift in either a chemostat (squares) or batch culture
+  (triangles) show similar trajectories and vary along
+  both components. Grey lines depict the major 
+  trajectory of variation for steady-state and upshift experiments.
+  \label{figure1}
+  }
+\end{figure}
+
+\begin{figure}
+%  \includegraphics[width=\textwidth]{output/Figure2.png}
+\caption{  \textbf{Global mRNA stability changes following a nitrogen upshift.}
+  \textbf{A)} 4tU-labeled mRNA from each gene was measured over time, before and
+  after the addition (vertical dotted line) of glutamine 
+  (nitrogen-upshift) or water (mock). Linear regression models were 
+  fit to the data with a rate before the upshift (solid line) 
+  and a change in rate after glutamine addition (dashed line). 
+  \textit{HTA1} is not significantly destabilized, 
+  whereas mRNAs encoding NCR-regulated transporters or 
+  pyruvate and trehalose metabolism components are 
+  significantly destabilized. 
+  Plots for all genes are available in the associated Shiny application
+  (Methods).
+  \textbf{B)} Comparison between the pre-upshift mRNA
+  degradation rate (y-axis) and the post-upshift mRNA degradation rate
+  (x-axis). % Positive values result from noise on the slope estimate.
+  Details of modeling are in \nameref{writeup2}.
+  \textbf{C)} Comparison between changes in mRNA expression following
+  upshift \cite{Airoldi2016} (y-axis) and the post-upshift
+  degradation rate (x-axis). % Both plots share the same x-axis.
+  Transcripts that are significantly destabilized are colored red, and
+  shown with red rug-marks in the marginal histograms.
+  \label{figure2}
+  }
+\end{figure}
+
+\begin{figure}
+%\includegraphics[width=\textwidth]{output/Figure3.png}
+\caption{
+  \textbf{\textit{GAP1} mRNA dynamics measured by flow cytometry.}
+  \textbf{A)} 
+  GAP1 mRNA following upshift measured using RT-qPCR, relative
+  to an external spike-in mRNA standard. The dashed line is fit
+  to points 2 minutes after the upshift. 
+  \textbf{B)} Flow
+  cytometry of wild-type yeast probed for \textit{GAP1} mRNA
+  in nitrogen-limited conditions and
+  following an upshift. The vertical grey lines indicate FACS gate
+  boundaries used for cell sorting. 
+  \textbf{C)} Representative cells from each bin sorted from the
+  experiment in panel B. 
+  \textbf{D)} Quantification of microscopy data. 
+  Each black dot represents a single cell. 
+  The mean number of foci per cell in each bin from panel B
+  is displayed as a red point.
+  \label{figure3}
+  }
+\end{figure}
+
+\begin{figure}
+%\includegraphics[width=\linewidth]{output/Figure4.png}
+\caption{
+  \textbf{BFF estimates of \textit{GAP1} mRNA abundance per mutant.}
+  \textbf{A)} Flow cytometry analysis of \textit{GAP1} mRNA 
+  abundance in the prototrophic
+  deletion collection (n=3,230 mutants) before and after the upshift. 
+  The vertical gray
+  lines denote boundaries of the four FACS gates. 
+  Biological replicates are indicated by color. 
+  \textbf{B)} Measurements for individual genes before and
+  after the upshift. Pseudo-events per strain per bin 
+  are on the y-axis.
+  Black dashed lines indicate maximum-likelihood 
+  fits of a log-normal to pseudo-events within each bin 
+  for each mutant. For plotting purposes, points are positioned on the
+  x-axis at the average signal for the library in that bin.
+  Colors are as in panel A. 
+  \textbf{C)} Distribution of modeled mean GAP1 mRNA levels
+  for each mutant.
+  \textbf{D)} The mean \textit{GAP1} mRNA expression levels 
+  fit using all replicate data for individual mutants before and after
+  the upshift are shown as points connected by a line, colored
+  according to the type of gene. 
+  The background violin plot shows the distribution 
+  of all 3,230 mutants.
+  Plots for all mutants are available in the associated Shiny application
+  (Methods).
+  \label{figure4}
+  }
+\end{figure}
+
+\begin{figure}
+%\includegraphics[width=\textwidth]{output/Figure5.png}
+\caption{
+  \textbf{Disrupting the Lsm1-7p/Pat1p complex and translational
+  regulation impairs clearance of \textit{GAP1} mRNA.}
+  \textbf{A)} In the background is the distribution of 
+  fit \textit{GAP1} mRNA mean expression levels for all mutants
+  in the pool. Indicated by colored points and lines are the means for
+  individual knockout strains, as labeled.
+  \textbf{B-E)}, \textit{GAP1} mRNA relative to
+  \textit{HTA1} mRNA before and 10 minutes after a glutamine upshift, 
+  in biological replicates. Lines are a log-linear regression fit. 
+  Points are dodged horizontally for clarity, but timepoints for
+  modeling and for drawn lines are 0 and 10 minutes exactly.
+  Wild-type is FY4, and each estimate of the \textit{GAP1}/\textit{HTA1}
+  ratio is normalized to the average ratio measured of FY4 at t=0 
+  for that qPCR batch.
+  \textbf{B)} \textit{xrn1}$\Delta$, \textit{ccr4}$\Delta$,
+  \textit{pop2}$\Delta$ are all defective in \textit{GAP1} mRNA clearance (p-values $<$ 0.004).
+  \textbf{C)} \textit{lsm1}$\Delta$ and \textit{lsm6}$\Delta$ are 
+  slowed in \textit{GAP1} mRNA clearance (p-values $<$ 0.0132 and 0.0299, respectively).
+  \textbf{D)} \textit{edc3}$\Delta$ is slowed in \textit{GAP1} mRNA clearance 
+  (p-value $<$ $10^{-4}$).
+  \textit{scd6}$\Delta$ and \textit{tif4632}$\Delta$ are slowed in
+  \textit{GAP1} mRNA clearance (p-values $<$ $10^{-5}$) and have lower levels of expression
+  before the upshift (p-values $<$ 0.003).
+  \textbf{E)} A deletion of 150bp 3' of \textit{GAP1} stop codon has
+  no significant effect, but a deletion of 100bp 5' of the start
+  codon has a defect in \textit{GAP1} mRNA clearance 
+  (p-value $<$ $10^{-4}$) and lower level of expression before the upshift
+  (p-value $<$ 0.0015).
+  \label{figure5}
+  }
+\end{figure}
+
+\clearpage
+
+\section*{Supporting information}
+
+% Include only the SI item label in the paragraph heading. Use the \nameref{label} command to cite SI items in the text.
+
+%
+%
+%
+
+\paragraph*{S1 Appendix.}
+\label{writeup2}
+\textbf{Supplementary file with experimental rationale, details,
+and protocol for the label-chase experiment.}
+
+
+\paragraph*{S2 Appendix.}
+\label{writeup4}
+\textbf{Supplementary file with experimental rationale, details, 
+and protocol for the BFF experiment.}
+
+
+%
+%
+%
+
+\paragraph*{S3 Table.} 
+\label{microarrayPCAloadings}. 
+\textbf{Principal components loadings of the microarray samples reprocessed from Airoldi et. al. 2016.}
+
+\paragraph*{S2 Table.} 
+\label{microarrayPCAgsea}. 
+\textbf{Gene set enrichment analysis of loadings on principal components one and two.}
+
+\paragraph*{S3 Table.}
+\label{dme211raw}
+\textbf{Raw counts of labeled mRNA quantified by RNAseq in label-chase experiment.}
+
+\paragraph*{S4 Table.}
+\label{dme211filterDirect}
+\textbf{Filtered label-chase RNAseq data for modeling, normalized directly within sample.}
+
+\paragraph*{S5 Table.}
+\label{dme211filterModel}
+\textbf{Filtered label-chase RNAseq data for modeling, normalized by modeling across samples.}
+
+\paragraph*{S6 Table.}
+\label{dme211resultsModel}
+\textbf{Degradation rate modeling results, from data normalized across samples.}
+
+\paragraph*{S7 Table.}
+\label{dme211goAndKegg}
+\textbf{Enriched GO and KEGG terms within the set of mRNA destabilized upon a nitrogen upshift, across sample normalization.}
+
+\paragraph*{S8 Table.}
+\label{dme209rawCountsGates}
+\textbf{Raw counts of events in each bin
+in the BFF experiment, and gate settings for the observations.}
+
+\paragraph*{S9 Table.}
+\label{dme209pooledFits}
+\textbf{Parameters of all 3230 models fit to filtered data.}
+
+\paragraph*{S10 Table.}
+\label{dme209gsea}
+\textbf{Gene-set enrichment analysis results using \textit{GAP1} estimates.}
+
+\paragraph*{S11 Table.}
+\label{strains}
+{\bf Strains used in this study.} 
+
+\paragraph*{S12 Table.}
+\label{primers}
+{\bf Primers used in this study.} 
+All primers were synthesized by Integrated DNA Technologies (IDT).
+
+Barseq multiplexing barcode sequences and index numbers available in 
+the file \texttt{data/dme209/sampleBarcodesRobinson2014.txt} within 
+the data zip archive (\nameref{codeanddata}).
+
+
+
+%
+%
+%
+
+\paragraph*{S1 Fig.}
+\label{longTermPCA}
+\textbf{The long-term transcriptome dynamics of a glutamine
+upshift.}
+Principal components analysis (SVD) of microarray data from 
+\cite{Airoldi2016}.  %inlineciteAiroldi2016
+Colored points are from steady-state chemostats grown in
+limitation for various nitrogen sources, at different growth rates.
+Time-series experiments are show in grey points, connected by lines,
+and line-type is the type of upshift (in batch or in chemostat).
+
+%
+
+\paragraph*{S2 Fig.}
+\label{timeplot}
+\textbf{The timing of changes in the component loadings of microarray samples.}
+The changes in loadings in the first two principal 
+components of microarray data analyzed from \cite{Airoldi2016},
+as in \textbf{Fig 1C}, for chemostat upshift experiments only.
+In the chemostat, addition of 400μM glutamine has a more 
+pronounced response than 40μM glutamine addition, 
+but all have a sharp response in short timescale.
+
+%
+
+\paragraph*{S3 Fig.}
+\label{timeplot}
+\textbf{Most of the variation is explained in the first two principal components.}
+\textbf{A)} From the PCA analysis used in \textbf{Fig 1C}, 
+the variance explained
+is plotted for the principal components, showing a steep 
+decrease in explained variance after the first two components.
+\textbf{B)} The third and fourth components explain a small amount
+of the variance and are not readily interpretable with respect to
+the transcriptome changes in response to the changing growth rates
+in either steady-state or dynamic conditions.
+
+%
+
+\paragraph*{S4 Fig.}
+\label{kkdComparison}
+\textbf{Comparison between rates of mRNA abundance changes and 
+  mRNA stability.}
+Comparisons of measured mRNA degradation from this study with mRNA abundance change rates
+from \cite{Airoldi2016}. 
+Pre-upshift degradation rates (top) don't explain the 
+abundance change. 
+The degradation rate changes (middle, difference between pre
+and post upshift) and the post-upshift rates (bottom) are anti-correlated
+with the abundance changes.
+
+
+\paragraph*{S5 Fig.}
+\label{comparisonESR}
+\textbf{Many of the destabilized mRNA are members of the ESR-up regulon.}
+Comparisons of degradation rates from this study with mRNA abundance change rates
+from \cite{Airoldi2016}. Destabilized transcripts are colored based on %inlineciteAiroldi2016
+their membership in the ESR gene set, as described in the supplement 
+of \cite{Brauer2008}.  %inlineciteBrauer2008
+Many of the destabilized set are "ESR-up" genes, as they
+are increase in expression in response to stresses.
+
+
+\paragraph*{S6 Fig.}
+\label{comparisonDestabilized}
+\textbf{Scatter plot of significantly destabilized transcripts.}
+For each transcript the x-axis is
+the rate of degradation rate post-upshift and the y-axis is the mRNA abundance
+change rate \cite{Airoldi2016} after the upshift.
+%These values were modeled to normalized
+%sequencing signal (x-axis) and normalized microarray ratio (y-axis). 
+The dashed line is a 1:1 line of equality. 
+
+\paragraph*{S7 Fig.}
+\label{compareSix}
+\textbf{Examples of individual mRNA with counteracting changes in 
+mRNA synthesis and degradation.}
+For several transcripts we found an increased rate of degradation
+post-upshift (red) compared to before the upshift (blue) but minimal
+changes in abundance (black).
+Each dataset is normalized to intersect at the same t=0 intercept.
+%examples of the slowest decreasing (in the microarray fits)
+%transcripts, we plot the microarray (abundance) and sequencing (decaying labeled
+%abundance) data normalized to be on the same relative y-axis scale (subtracted
+%t\_0 y-intercepts of fits).
+%Black is the microarrays, so abundance. Blue is the
+%water-upshifted samples. Red is the glutamine-upshifted samples. This shows how
+%transcripts can be destabilized (blue slope changing to red slope) without being
+%greatly repressed (black line is not of same slope as red line), showing that
+%synthesis and degradation can contradict each other for some transcripts in this system.
+%Black is the microarrays, so total abundance. Blue is the 4tU-labeled
+%signal in water-upshifted samples. 
+%Red is the 4tU-labeled signal in glutamine-upshifted samples. 
+%Destabilization does not necessarily result in a rapid clearance
+%of the mRNA.
+
+\paragraph*{S8 Fig.}
+\label{lengthAndCodons}
+\textbf{The destabilized set of transcripts is longer and has a higher frequency
+of optimal codons than the rest of the transcriptome.}
+Comparisons of destabilized mRNAs with the rest of the transcriptome.
+\textbf{A)} 
+Destabilized transcripts tend to have longer CDS lengths (p-value $<\;2\times10^{-5}$
+by Wilcoxon rank sum test). 
+\textbf{B)} 
+On average, the destabilized transcripts have more optimal codons
+than the rest of the transcriptome (p-value $<\;2\times10^{-8}$ Wilcoxon rank
+sum test).
+The fraction of optimal codons per feature
+was obtained from the supplement of \cite{Khong2017} using definitions 
+from \cite{Presnyak2015}.  
+
+
+\paragraph*{S9 Fig.}
+\label{hrp1}
+\textbf{Enrichment of Hrp1p motif in 5' UTRs of destabilized
+transcripts.}
+Sequences were analyzed for RBP binding motif enrichment
+using the AME program in MEME and significant hits confirmed using a
+logistic model predicting destabilization based on motif content per sequence
+length. Hrp1p is significantly ( p $<$ 0.0001 ) enriched in
+the 5' UTRs of destabilized transcripts. Motif matches were
+counted using the GRanges package for the 5' UTRs, 3' UTRs,
+and coding sequence of transcripts using the largest isoforms detected in
+\cite{Pelechano2014}. %inlinecitePelechano2014
+
+%
+
+\paragraph*{S10 Fig.}
+\label{gap1Delete}
+\textbf{\textit{GAP1} delete or omission of the targeting probe results in no \textit{GAP1} FISH signal.}
+%\textit{GAP1} delete or omission of the targeting probe removes signal of GAP1 FISH.
+Wild-type or \textit{GAP1}$\Delta$ cells were grown in proline-media.
+%, which induces expression of \textit{GAP1}. 
+As seen in the positive control there is heterogeneity in the
+signal. 
+%This is likely due to technical issues, namely fixation time. 
+
+%
+
+\paragraph*{S11 Fig.}
+\label{pca}
+\textbf{Principal components analysis of the abundance estimates using BFF.}
+Each color is a type of sample, from low to high gates (with black denoting the
+input samples before sort). Technical replicates are connected by dashed lines,
+biological replicates are denoted with letters A B or C. 
+The first two principal components
+show the separation of gates by signal intensity and reflects that the lower
+gates on the upshifted samples were very close (blue and red samples on far right
+panel), within the distribution of the negative population. This is consistent
+with their tight sampling of the "GAP1-off" population, as seen in
+\textbf{Fig~\ref{figure4}A}.
+
+
+\paragraph*{S12 Fig.}
+\label{rarefaction}
+\textbf{Rarefaction curve of UMI saturation.}
+The solid-line curve denotes the theoretical expectation of total 
+observations per UMI in a sample (x-axis) and the number of 
+unique UMIs (y-axis). This curve shows how 
+UMI-collisions are expected to depress the number of unique UMIs. Each 
+point is from real data, with these
+two numbers tabulated for each combination of a sample and strain barcode. We
+see that these largely follow the curve of saturation of UMI-collisions, but
+that it falls well below the expectation of independent UMI-collision, thus
+we believe that there is an additional contribution of PCR-amplification noise
+(PCR duplicates). 
+
+%
+
+\paragraph*{S13 Fig.}
+\label{gluco}
+\textbf{Knock-out mutants of negative regulators of 
+gluconeogenesis are associated with higher \textit{GAP1} mRNA expression 
+after the upshift.}
+Knock-out mutants of negative regulators of gluconeogenesis are associated with
+higher estimated \textit{GAP1} mean after the upshift, by GSEA analysis
+of GO-terms (p-value $<$ 0.05).
+
+
+\paragraph*{S14 Fig.}
+\label{sulfate}
+\textbf{Knock-out mutants of genes involved in sulfate assimilation
+are associated with higher estimated \textit{GAP1} mRNA expression mean before the upshift.}
+Knock-out mutants of involved in sulfate assimilation are associated with
+higher estimated \textit{GAP1} mean before the upshift, by GSEA analysis
+of GO-terms (p-value $<$ 0.05).
+
+
+\paragraph*{S15 Fig.}
+\label{prePredictPost}
+\textbf{The relationship between mean \textit{GAP1} mean expression before the 
+shift and after the upshift.}
+%The relationship between the estimated mean before the upshift and after the
+%upshift. 
+Scatter plot of the estimated means, with marginal histograms along
+top and right. Red vertical line on top histogram is a cut-off of
+\textit{GAP1} mRNA induction for this analysis,
+and is the mean of the fit to wild-type minus one standard deviation of that
+distribution. The red linear regression line is fit to all points above this
+threshold, in which expression was detected before the upshift.
+
+
+
+\paragraph*{S16 Fig.}
+\label{tco89}
+\textbf{\textit{tco89}$\Delta$ and \textit{xrn1}$\Delta$ show
+defects in \textit{GAP1} mRNA regulation in the BFF assay.}
+%Data and fits for several mutants. 
+\textit{xrn1}$\Delta$ mutant (left) is lowly abundant in
+the library and is only observed in the highest bin of \textit{GAP1} signal, consistent
+with the role of Xrn1p as a global exonuclease. 
+\textit{tco89}$\Delta$ is the only detected member that would abrogate TORC1 activity.
+This mutant (right) has elevated \textit{GAP1} mRNA before and after the upshift,
+consistent with the role of TORC1 in repressing the NCR regulon. 
+
+%
+
+\paragraph*{S17 Fig.}
+\label{bothutr}
+\textbf{Two independent deletions of the \textit{GAP1} 5' UTR 
+show the same phenotype.}
+%During strain construction, 
+A deletion of 152bp 5' of the start
+codon was also generated. We tested \textit{GAP1} dynamics in this
+strain as well, and found that it shares the same phenotype as a
+100bp 5' UTR deletion. Methods are the same as in \textbf{Fig~\ref{figure5}E},
+both 5' UTR deletes are slowed in clearance, ANCOVA p $<$ 0.05 .
+
+%
+
+\paragraph*{S18 Fig.}
+\label{pbodyScope}
+\textbf{Processing-body dynamics are not associated with the
+nitrogen upshift.}
+A strain containing a copy of Dcp2p-GFP expressed from a plasmid
+was grown in conditions of exponential phase in YPD or 10 minutes of
+starvation in water (first row) to confirm detection of processing-body
+foci using Dcp2-GFP.
+%result in the formation of processing-body foci of Dcp2-GFP.
+We do not see either formation or dissolution of Dcp2-GFP foci during
+the nitrogen upshift (bottom row).
+
+\section*{Acknowledgments}
+
+We would like to acknowledge the funding source of 
+NIH grant 5R01GM107466.
+We would also like to thank
+Andreas Hochwagen and Viji Subramanian for microscope access, 
+Ken Birnbaum for helpful conversations and equipment usage, 
+Evelina Tutucci for demonstrating mRNA FISH,
+the NYU Genomics Core facility for sequencing and flow cytometry,
+and past and present members of the Gresham and Vogel labs for 
+discussions.
+
+\nolinenumbers
+
+% Either type in your references using
+% \begin{thebibliography}{}
+% \bibitem{}
+% Text
+% \end{thebibliography}
+%
+% or
+%
+% Compile your BiBTeX database using our plos2015.bst
+% style file and paste the contents of your .bbl file
+% here. See http://journals.plos.org/plosone/s/latex for 
+% step-by-step instructions.
+%
+\begin{thebibliography}{200}
+
+\bibitem{Hargrove1989}
+Hargrove JL, Schmidt FH.
+\newblock The role of {mRNA} and protein stability in gene expression.
+\newblock FASEB J. 1989;3(12):2360--2370.
+
+\bibitem{Perez-Ortin2013}
+P{\'e}rez-Ort{\'\i}n JE, Alepuz P, Ch{\'a}vez S, Choder M.
+\newblock Eukaryotic {mRNA} decay: methodologies, pathways, and links
+to other
+  stages of gene expression.
+\newblock J Mol Biol. 2013;425(20):3750--3775.
+
+\bibitem{Alonso2012}
+Alonso CR.
+\newblock A complex {'mRNA} degradation code' controls gene expression
+during
+  animal development.
+\newblock Trends Genet. 2012;28(2):78--88.
+
+\bibitem{West2017}
+West SM, Mecenas D, Gutwein M, Aristiz{\'a}bal-Corrales D, Piano F,
+Gunsalus
+  KC.
+\newblock Developmental dynamics of gene expression and alternative
+  polyadenylation in the Caenorhabditis elegans germline.
+\newblock Genome Biology. 2018;19(1):8.
+
+\bibitem{Aghib1990}
+Aghib D, Bishop J, Ottolenghi S, Guerrasio A, Serra A, Saglio G.
+\newblock A 3' truncation of MYC caused by chromosomal translocation
+in a human
+  T-cell leukemia increases mRNA stability.
+\newblock Oncogene. 1990;5(5):707—711.
+
+\bibitem{Canadell2015}
+Canadell D, Garc{\'\i}a-Mart{\'\i}nez J, Alepuz P,
+P{\'e}rez-Ort{\'\i}n JE,
+  Ari{\~n}o J.
+\newblock Impact of high pH stress on yeast gene expression: A
+comprehensive
+  analysis of {mRNA} turnover during stress responses.
+\newblock Biochim Biophys Acta. 2015;1849(6):653--664.
+
+\bibitem{Garcia-Martinez2016}
+Garc{\'\i}a-Mart{\'\i}nez J, Troul{\'e} K, Ch{\'a}vez S,
+P{\'e}rez-Ort{\'\i}n
+  JE.
+\newblock Growth rate controls {mRNA} turnover in steady and
+non-steady states.
+\newblock RNA Biol. 2016;13(12):1175--1181.
+
+\bibitem{Scheffler1998}
+Scheffler IE, de~la Cruz BJ, Prieto S.
+\newblock Control of {mRNA} turnover as a mechanism of glucose
+repression in
+  Saccharomyces cerevisiae.
+\newblock Int J Biochem Cell Biol. 1998;30(11):1175--1193.
+
+\bibitem{Gasch2000}
+Gasch AP, Spellman PT, Kao CM, Carmel-Harel O, Eisen MB, Storz G,
+et~al.
+\newblock Genomic expression programs in the response of yeast cells
+to
+  environmental changes.
+\newblock Mol Biol Cell. 2000;11(12):4241--4257.
+
+\bibitem{Conway2012}
+Conway MK, Grunwald D, Heideman W.
+\newblock Glucose, nitrogen, and phosphate repletion in Saccharomyces
+  cerevisiae: common transcriptional responses to different nutrient
+signals.
+\newblock G3. 2012;2(9):1003--1017.
+
+\bibitem{Castells2011}
+Castells-Roca L, Garc{\'\i}a-Mart{\'\i}nez J, Moreno J, Herrero E,
+Bell{\'\i}
+  G, P{\'e}rez-Ort{\'\i}n JE.
+\newblock Heat shock response in yeast involves changes in both
+transcription
+  rates and mRNA stabilities.
+\newblock PloS one. 2011;6(2):e17272.
+
+\bibitem{Romero2009}
+Romero-Santacreu L, Moreno J, P{\'e}rez-Ort{\'\i}n JE, Alepuz P.
+\newblock Specific and global regulation of mRNA stability during
+osmotic
+  stress in Saccharomyces cerevisiae.
+\newblock Rna. 2009;15(6):1110--1120.
+
+\bibitem{Molina2008}
+Molina-Navarro MM, Castells-Roca L, Bell{\'\i} G,
+Garc{\'\i}a-Mart{\'\i}nez J,
+  Mar{\'\i}n-Navarro J, Moreno J, et~al.
+\newblock Comprehensive transcriptional analysis of the oxidative
+response in
+  yeast.
+\newblock Journal of Biological Chemistry. 2008;283(26):17908--17918.
+
+\bibitem{Shalem2008}
+Shalem O, Dahan O, Levo M, Martinez MR, Furman I, Segal E, et~al.
+\newblock Transient transcriptional responses to stress are generated
+by
+  opposing effects of {mRNA} production and degradation.
+\newblock Mol Syst Biol. 2008;4:223.
+
+\bibitem{Yin2003}
+Yin Z, Wilson S, Hauser NC, Tournu H, Hoheisel JD, Brown AJP.
+\newblock Glucose triggers different global responses in yeast,
+depending on
+  the strength of the signal, and transiently stabilizes ribosomal
+protein
+  {mRNAs}.
+\newblock Mol Microbiol. 2003;48(3):713--724.
+
+\bibitem{De_la_Cruz2002}
+de~la Cruz BJ, Prieto S, Scheffler IE.
+\newblock The role of the 5' untranslated region ({UTR}) in
+glucose-dependent
+  {mRNA} decay.
+\newblock Yeast. 2002;19(10):887--902.
+
+\bibitem{Mercado1994}
+Mercado JJ, Smith R, Sagliocco FA, Brown AJ, Gancedo JM.
+\newblock The levels of yeast gluconeogenic {mRNAs} respond to
+environmental
+  factors.
+\newblock Eur J Biochem. 1994;224(2):473--481.
+
+\bibitem{Lee2011}
+Lee MV, Topper SE, Hubler SL, Hose J, Wenger CD, Coon JJ, et~al.
+\newblock A dynamic model of proteome changes reveals new roles for
+transcript
+  alteration in yeast.
+\newblock Mol Syst Biol. 2011;7:514.
+
+\bibitem{Kresnowati2006}
+Kresnowati MTAP, van Winden WA, Almering MJH, ten Pierick A, Ras C,
+Knijnenburg
+  TA, et~al.
+\newblock When transcriptome meets metabolome: fast cellular responses
+of yeast
+  to sudden relief of glucose limitation.
+\newblock Mol Syst Biol. 2006;2:49.
+
+\bibitem{Kief1981}
+Kief DR, Warner JR.
+\newblock Coordinate control of syntheses of ribosomal ribonucleic
+acid and
+  ribosomal proteins during nutritional shift-up in Saccharomyces
+cerevisiae.
+\newblock Mol Cell Biol. 1981;1(11):1007--1015.
+
+\bibitem{Giordano2016}
+Giordano N, Mairet F, Gouz{\'e} JL, Geiselmann J, de~Jong H.
+\newblock Dynamical Allocation of Cellular Resources as an Optimal
+Control
+  Problem: Novel Insights into Microbial Growth Strategies.
+\newblock PLoS Comput Biol. 2016;12(3):e1004802.
+
+\bibitem{Shachrai2010}
+Shachrai I, Zaslaver A, Alon U, Dekel E.
+\newblock Cost of Unneeded Proteins in E. coli Is Reduced after
+Several
+  Generations in Exponential Growth.
+\newblock Mol Cell. 2010;38(5):758--767.
+
+\bibitem{Magasanik2002}
+Magasanik B, Kaiser CA.
+\newblock Nitrogen regulation in Saccharomyces cerevisiae.
+\newblock Gene. 2002;290(1-2):1--18.
+
+\bibitem{Godard2007}
+Godard P, Urrestarazu A, Vissers S, Kontos K, Bontempi G, van Helden
+J, et~al.
+\newblock Effect of 21 different nitrogen sources on global gene
+expression in
+  the yeast Saccharomyces cerevisiae.
+\newblock Mol Cell Biol. 2007;27(8):3065--3086.
+
+\bibitem{Airoldi2016}
+Airoldi EM, Miller D, Athanasiadou R, Brandt N, Abdul-Rahman F,
+Neymotin B,
+  et~al.
+\newblock Steady-state and dynamic gene expression programs in
+Saccharomyces
+  cerevisiae in response to variation in environmental nitrogen.
+\newblock Mol Biol Cell. 2016;27(8):1383--1396.
+
+\bibitem{Beck1999}
+Beck T, Hall MN.
+\newblock The {TOR} signalling pathway controls nuclear localization
+of
+  nutrient-regulated transcription factors.
+\newblock Nature. 1999;402(6762):689--692.
+
+\bibitem{Tate2013}
+Tate JJ, Cooper TG.
+\newblock Five conditions commonly used to down-regulate tor complex 1
+generate
+  different physiological situations exhibiting distinct requirements
+and
+  outcomes.
+\newblock J Biol Chem. 2013;288(38):27243--27262.
+
+\bibitem{Tate2017}
+Tate JJ, Buford D, Rai R, Cooper TG.
+\newblock General Amino Acid Control and 14-3-3 Proteins Bmh1/2 Are
+Required
+  for Nitrogen Catabolite {Repression-Sensitive} Regulation of Gln3
+and Gat1
+  Localization.
+\newblock Genetics. 2017;205(2):633--655.
+
+\bibitem{Cooper1983}
+Cooper TG, Sumrada RA.
+\newblock What is the function of nitrogen catabolite repression in
+  Saccharomyces cerevisiae?
+\newblock J Bacteriol. 1983;155(2):623--627.
+
+\bibitem{Stanbrough1995}
+Stanbrough M, Magasanik B.
+\newblock Transcriptional and posttranslational regulation of the
+general amino
+  acid permease of Saccharomyces cerevisiae.
+\newblock J Bacteriol. 1995;177(1):94--102.
+
+\bibitem{Risinger2006}
+Risinger AL, Cain NE, Chen EJ, Kaiser CA.
+\newblock Activity-dependent reversible inactivation of the general
+amino acid
+  permease.
+\newblock Mol Biol Cell. 2006;17(10):4411--4419.
+
+\bibitem{Merhi2012}
+Merhi A, Andre B.
+\newblock Internal Amino Acids Promote Gap1 Permease Ubiquitylation
+via
+  {TORC1/Npr1/14-3-3-Dependent} Control of the Bul {Arrestin-Like}
+Adaptors.
+\newblock Mol Cell Biol. 2012;32(22):4510--4522.
+
+\bibitem{Parker2012}
+Parker R.
+\newblock {RNA} Degradation in Saccharomyces cerevisae.
+\newblock Genetics. 2012;191(3):671--702.
+
+\bibitem{Tharun2000}
+Tharun S, He W, Mayes AE, Lennertz P, Beggs JD, Parker R.
+\newblock Yeast Sm-like proteins function in {mRNA} decapping and
+decay.
+\newblock Nature. 2000;404(6777):515--518.
+
+\bibitem{Sharif2013}
+Sharif H, Conti E.
+\newblock Architecture of the {Lsm1-7-Pat1} complex: a conserved
+assembly in
+  eukaryotic {mRNA} turnover.
+\newblock Cell Rep. 2013;5(2):283--291.
+
+\bibitem{Coller2004}
+Coller J, Parker R.
+\newblock Eukaryotic {mRNA} Decapping.
+\newblock Annu Rev Biochem. 2004;73(1):861--890.
+
+\bibitem{Nissan2010}
+Nissan T, Rajyaguru P, She M, Song H, Parker R.
+\newblock Decapping activators in Saccharomyces cerevisiae act by
+multiple
+  mechanisms.
+\newblock Mol Cell. 2010;39(5):773--783.
+
+\bibitem{Olivas2000}
+Olivas W, Parker R.
+\newblock The Puf3 protein is a transcript-specific regulator of
+{mRNA}
+  degradation in yeast.
+\newblock EMBO J. 2000;19(23):6602--6611.
+
+\bibitem{lee2015}
+Lee CD, Tu BP.
+\newblock Glucose-regulated phosphorylation of the PUF protein Puf3
+regulates
+  the translational fate of its bound mRNAs and association with RNA
+granules.
+\newblock Cell reports. 2015;11(10):1638--1650.
+
+\bibitem{Haimovich2013}
+Haimovich G, Medina DA, Causse SZ, Garber M, Mill{\'a}n-Zambrano G,
+Barkai O,
+  et~al.
+\newblock Gene expression is circular: factors for {mRNA} degradation
+also
+  foster {mRNA} synthesis.
+\newblock Cell. 2013;153(5):1000--1011.
+
+\bibitem{Trcek2011}
+Trcek T, Larson DR, Mold{\'o}n A, Query CC, Singer RH.
+\newblock Single-molecule {mRNA} decay measurements reveal promoter-
+regulated
+  {mRNA} stability in yeast.
+\newblock Cell. 2011;147(7):1484--1497.
+
+\bibitem{braun2016snf1}
+Braun KA, Dombek KM, Young ET.
+\newblock Snf1-dependent transcription confers glucose-induced decay
+upon the
+  mRNA product.
+\newblock Molecular and cellular biology. 2016;36(4):628--644.
+
+\bibitem{Young2012}
+Young ET, Zhang C, Shokat KM, Parua PK, Braun KA.
+\newblock The {AMP-activated} protein kinase Snf1 regulates
+transcription
+  factor binding, {RNA} polymerase {II} activity, and {mRNA} stability
+of
+  glucose-repressed genes in Saccharomyces cerevisiae.
+\newblock J Biol Chem. 2012;287(34):29021--29034.
+
+\bibitem{Braun2014}
+Braun KA, Vaga S, Dombek KM, Fang F, Palmisano S, Aebersold R, et~al.
+\newblock Phosphoproteomic analysis identifies proteins involved in
+  transcription-coupled {mRNA} decay as targets of Snf1 signaling.
+\newblock Sci Signal. 2014;7(333):ra64.
+
+\bibitem{Ramachandran2011}
+Ramachandran V, Shah KH, Herman PK.
+\newblock The {cAMP-dependent} protein kinase signaling pathway is a
+key
+  regulator of {P} body foci formation.
+\newblock Mol Cell. 2011;43(6):973--981.
+
+\bibitem{Luo2011}
+Luo G, Costanzo M, Boone C, Dickson RC.
+\newblock Nutrients and the Pkh1/2 and Pkc1 protein kinases control
+{mRNA}
+  decay and P-body assembly in yeast.
+\newblock J Biol Chem. 2011;286(11):8759--8770.
+
+\bibitem{Talarek2010}
+Talarek N, Cameroni E, Jaquenoud M, Luo X, Bontron S, Lippman S,
+et~al.
+\newblock Initiation of the {TORC1-regulated} {G0} program requires
+Igo1/2,
+  which license specific {mRNAs} to evade degradation via the 5'-3'
+{mRNA}
+  decay pathway.
+\newblock Mol Cell. 2010;38(3):345--355.
+
+\bibitem{Neymotin2014}
+Neymotin B, Athanasiadou R, Gresham D.
+\newblock Determination of in vivo {RNA} kinetics using {RATE-seq}.
+\newblock RNA. 2014;20(10):1645--1652.
+
+\bibitem{Munchel2011}
+Munchel SE, Shultzaberger RK, Takizawa N, Weis K.
+\newblock Dynamic profiling of {mRNA} turnover reveals gene-specific
+and
+  system-wide regulation of {mRNA} decay.
+\newblock Mol Biol Cell. 2011;22(15):2787--2795.
+
+\bibitem{Hein1995}
+Hein C, Springael JY, Volland C, Haguenauer-Tsapis R, Andre B.
+\newblock {NPI1}, an essential yeast gene involved in induced
+degradation of
+  Gap1 and Fur4 permeases, encodes the Rsp5 ubiquitin-protein ligase.
+\newblock Mol Microbiol. 1995;18(1):77--87.
+
+\bibitem{volland1994}
+Volland C, Urban-Grimal D, Geraud G, Haguenauer-Tsapis R.
+\newblock Endocytosis and degradation of the yeast uracil permease under adverse conditions.
+\newblock Journal of Biological Chemistry. 1994;269(13):9833--9841.
+
+\bibitem{Storey2003}
+Storey JD, Tibshirani R.
+\newblock Statistical significance for genomewide studies.
+\newblock Proceedings of the National Academy of Sciences.
+  2003;100(16):9440--9445.
+
+\bibitem{Miller2011}
+Miller C, Schwalb B, Maier K, Schulz D, D{\"u}mcke S, Zacher B, et~al.
+\newblock Dynamic transcriptome analysis measures rates of {mRNA}
+synthesis and
+  decay in yeast.
+\newblock Mol Syst Biol. 2011;7:458.
+
+\bibitem{Chen1998}
+Chen S, Hyman LE.
+\newblock A specific RNA-protein interaction at yeast polyadenylation
+  efficiency elements.
+\newblock Nucleic acids research. 1998;26(21):4965--4974.
+
+\bibitem{Kessler1997}
+Kessler MM, Henry MF, Shen E, Zhao J, Gross S, Silver PA, et~al.
+\newblock Hrp1, a sequence-specific RNA-binding protein that shuttles
+between
+  the nucleus and the cytoplasm, is required for mRNA 3'-end formation
+in
+  yeast.
+\newblock Genes \& development. 1997;11(19):2545--2556.
+
+\bibitem{Kebaara2003}
+Kebaara B.
+\newblock The Upf-dependent decay of wild-type {PPR1} {mRNA} depends
+on its
+  {5'-UTR} and first 92 {ORF} nucleotides.
+\newblock Nucleic Acids Res. 2003;31(12):3157--3165.
+
+\bibitem{Guisbert2005}
+Guisbert K, Duncan K, Li H, Guthrie C.
+\newblock Functional specificity of shuttling {hnRNPs} revealed by
+genome-wide
+  analysis of their {RNA} binding profiles.
+\newblock RNA. 2005;11(4):383--393.
+
+\bibitem{Khong2017}
+Khong A, Matheny T, Jain S, Mitchell SF, Wheeler JR, Parker R.
+\newblock The Stress Granule Transcriptome Reveals Principles of
+{mRNA}
+  Accumulation in Stress Granules.
+\newblock Mol Cell. 2017;68(4):808--820.e5.
+
+\bibitem{Neklesa2009}
+Neklesa TK, Davis RW.
+\newblock A genome-wide screen for regulators of {TORC1} in response
+to amino
+  acid starvation reveals a conserved Npr2/3 complex.
+\newblock PLoS Genet. 2009;5(6):e1000515.
+
+\bibitem{Sliva2016}
+Sliva A, Kuang Z, Meluh PB, Boeke JD.
+\newblock Barcode Sequencing Screen Identifies {SUB1} as a Regulator
+of Yeast
+  Pheromone Inducible Genes.
+\newblock G3. 2016;6(4):881--892.
+
+\bibitem{Worley2015}
+Worley J, Sullivan A, Luo X, Kaplan ME, Capaldi AP.
+\newblock {Genome-Wide} Analysis of the {TORC1} and Osmotic Stress
+Signaling
+  Network in Saccharomyces cerevisiae.
+\newblock G3. 2015;6(2):463--474.
+
+\bibitem{Vandersluis2014}
+VanderSluis B, Hess DC, Pesyna C, Krumholz EW, Syed T, Szappanos B,
+et~al.
+\newblock Broad metabolic sensitivity profiling of a prototrophic
+yeast
+  deletion collection.
+\newblock Genome Biol. 2014;15(4):R64.
+
+\bibitem{Smith2009}
+Smith AM, Heisler LE, Mellor J, Kaper F, Thompson MJ, Chee M, et~al.
+\newblock Quantitative phenotyping via deep barcode sequencing.
+\newblock Genome Res. 2009;19(10):1836--1842.
+
+\bibitem{Robinson2013}
+Robinson DG, Chen W, Storey JD, Gresham D.
+\newblock Design and Analysis of Bar-seq Experiments.
+\newblock G3: Genes|Genomes|Genetics. 2013;4(1):11--18.
+
+\bibitem{Giaever2014}
+Giaever G, Nislow C.
+\newblock The yeast deletion collection: a decade of functional
+genomics.
+\newblock Genetics. 2014;197(2):451--465.
+
+\bibitem{Kinney2010}
+Kinney JB, Murugan A, Callan CG, Cox EC.
+\newblock Using deep sequencing to characterize the biophysical
+mechanism of a
+  transcriptional regulatory sequence.
+\newblock Proceedings of the National Academy of Sciences.
+  2010;107(20):9158--9163.
+
+\bibitem{Peterman2016}
+Peterman N, Levine E.
+\newblock Sort-seq under the hood: implications of design choices on
+  large-scale characterization of sequence-function relations.
+\newblock BMC Genomics. 2016;17:206.
+
+\bibitem{Raj2008}
+Raj A, van~den Bogaard P, Rifkin SA, van Oudenaarden A, Tyagi S.
+\newblock Imaging individual {mRNA} molecules using multiple singly
+labeled
+  probes.
+\newblock Nat Methods. 2008;5(10):877--879.
+
+\bibitem{Klemm2014}
+Klemm S, Semrau S, Wiebrands K, Mooijman D, Faddah DA, Jaenisch R,
+et~al.
+\newblock Transcriptional profiling of cells sorted by {RNA}
+abundance.
+\newblock Nat Methods. 2014;11(5):549--551.
+
+\bibitem{Hanley2013}
+Hanley MB, Lomas W, Mittar D, Maino V, Park E.
+\newblock Detection of low abundance {RNA} molecules in individual
+cells by
+  flow cytometry.
+\newblock PLoS One. 2013;8(2):e57002.
+
+\bibitem{Fu2011}
+Fu GK, Hu J, Wang PH, Fodor SPA.
+\newblock Counting individual {DNA} molecules by the stochastic
+attachment of
+  diverse labels.
+\newblock Proc Natl Acad Sci U S A. 2011;108(22):9026--9031.
+
+\bibitem{Scherens2006}
+Scherens B, Feller A, Vierendeels F, Messenguy F, Dubois E.
+\newblock Identification of direct and indirect targets of the Gln3
+and Gat1
+  activators by transcriptional profiling in response to nitrogen
+availability
+  in the short and long term.
+\newblock FEMS Yeast Res. 2006;6(5):777--791.
+
+\bibitem{Hoyle2007}
+Hoyle NP, Castelli LM, Campbell SG, Holmes LEA, Ashe MP.
+\newblock Stress-dependent relocalization of translationally primed
+{mRNPs} to
+  cytoplasmic granules that are kinetically and spatially distinct
+from
+  P-bodies.
+\newblock J Cell Biol. 2007;179(1):65--74.
+
+\bibitem{Rajyaguru2012}
+Rajyaguru P, She M, Parker R.
+\newblock Scd6 targets {eIF4G} to repress translation: {RGG} motif
+proteins as
+  a class of {eIF4G-binding} proteins.
+\newblock Mol Cell. 2012;45(2):244--254.
+
+\bibitem{Puig2005}
+Puig S, Askeland E, Thiele DJ.
+\newblock Coordinated remodeling of cellular metabolism during iron
+deficiency
+  through targeted {mRNA} degradation.
+\newblock Cell. 2005;120(1):99--110.
+
+\bibitem{Duffy2015}
+Duffy EE, Rutenberg-Schoenberg M, Stark CD, Kitchen RR, Gerstein MB,
+Simon MD.
+\newblock Tracking Distinct {RNA} Populations Using Efficient and
+Reversible
+  Covalent Chemistry.
+\newblock Mol Cell. 2015;59(5):858--866.
+
+\bibitem{Chan2017}
+Chan LY, Mugler CF, Heinrich S, Vallotton P, Weis K.
+\newblock Non-invasive measurement of mRNA decay reveals translation
+initiation
+  as the major determinant of mRNA stability.
+\newblock bioRxiv. 2017; p. 214775.
+
+\bibitem{Boles1998}
+Boles E, de~Jong-Gubbels P, Pronk JT.
+\newblock Identification and Characterization of MAE1, the
+Saccharomyces
+  cerevisiae Structural Gene Encoding Mitochondrial Malic Enzyme.
+\newblock Journal of bacteriology. 1998;180(11):2875--2882.
+
+\bibitem{Tesniere2017}
+Tesni{\`e}re C, Pradal M, Bessi{\`e}re C, Sanchez I, Blondin B, Bigey
+F.
+\newblock Relief from nitrogen starvation triggers a transient
+destabilization
+  of glycolytic {mRNAs} in Saccharomyces cerevisiae cells.
+\newblock Mol Biol Cell. 2017;.
+
+\bibitem{Gonzalez2000}
+Gonz{\'a}lez CI, Ruiz-Echevarr{\'\i}a MJ, Vasudevan S, Henry MF, Peltz
+SW.
+\newblock The yeast {hnRNP-like} protein {Hrp1/Nab4} marks a
+transcript for
+  nonsense-mediated {mRNA} decay.
+\newblock Mol Cell. 2000;5(3):489--499.
+
+\bibitem{Stanbrough1996}
+Stanbrough M, Magasanik B.
+\newblock Two transcription factors, Gln3p and Nil1p, use the same
+GATAAG sites
+  to activate the expression of GAP1 of Saccharomyces cerevisiae.
+\newblock Journal of bacteriology. 1996;178(8):2465--2468.
+
+\bibitem{Arribere2013}
+Arribere JA, Gilbert WV.
+\newblock Roles for transcript leaders in translation and mRNA decay
+revealed
+  by transcript leader sequencing.
+\newblock Genome research. 2013;23(6):977--987.
+
+\bibitem{Baumgartner2011}
+Baumgartner BL, Bennett MR, Ferry M, Johnson TL, Tsimring LS, Hasty J.
+\newblock Antagonistic gene transcripts regulate adaptation to new
+growth
+  environments.
+\newblock Proc Natl Acad Sci U S A. 2011;108(52):21087--21092.
+
+\bibitem{Neymotin2016}
+Neymotin B, Ettore V, Gresham D.
+\newblock Multiple Transcript Properties Related to Translation Affect
+{mRNA}
+  Degradation Rates in Saccharomyces cerevisiae.
+\newblock G3. 2016;.
+
+\bibitem{Rouhanifard2017}
+Rouhanifard SH, Dunagin M, Mellis IA, Bayatpour S, Symmons O, Cote A,
+et~al.
+\newblock Single-molecule fluorescent amplification of {RNA} using
+{clampFISH}
+  probes.
+\newblock bioRxiv (pre-print). 2017;.
+
+\bibitem{Brauer2008}
+Brauer MJ, Huttenhower C, Airoldi EM, Rosenstein R, Matese JC, Gresham
+D,
+  et~al.
+\newblock Coordination of growth rate, cell cycle, stress response,
+and
+  metabolic activity in yeast.
+\newblock Molecular biology of the cell. 2008;19(1):352--367.
+
+\bibitem{Amberg2005}
+Amberg DC, Burke DJ, Strathern JN.
+\newblock Methods in Yeast Genetics: A Cold Spring Harbor Laboratory
+Course
+  Manual, 2005 Edition (Cold Spring).
+\newblock $\{$Cold Spring Harbor Laboratory Press$\}$; 2005.
+
+\bibitem{Storici2006}
+Storici F, Resnick MA.
+\newblock The delitto perfetto approach to in vivo site-directed
+mutagenesis
+  and chromosome rearrangements with synthetic oligonucleotides in
+yeast.
+\newblock Methods in enzymology. 2006;409:329--345.
+
+\bibitem{Hong2017}
+Hong J, Gresham D.
+\newblock Incorporation of unique molecular identifiers in TruSeq
+adapters
+  improves the accuracy of quantitative sequencing.
+\newblock BioTechniques. 2017;63(5):221--226.
+
+\bibitem{Martin2011}
+Martin M.
+\newblock Cutadapt removes adapter sequences from high-throughput
+sequencing
+  reads.
+\newblock EMBnet journal. 2011;17(1):pp--10.
+
+\bibitem{Kim2013}
+Kim D, Pertea G, Trapnell C, Pimentel H, Kelley R, Salzberg SL.
+\newblock {TopHat2}: accurate alignment of transcriptomes in the
+presence of
+  insertions, deletions and gene fusions.
+\newblock Genome Biol. 2013;14(4):R36.
+
+\bibitem{Li2009}
+Li H, Handsaker B, Wysoker A, Fennell T, Ruan J, Homer N, et~al.
+\newblock The sequence alignment/map format and SAMtools.
+\newblock Bioinformatics. 2009;25(16):2078--2079.
+
+\bibitem{Smith2017}
+Smith T, Heger A, Sudbery I.
+\newblock {UMI-tools}: modeling sequencing errors in Unique Molecular
+  Identifiers to improve quantification accuracy.
+\newblock Genome Res. 2017;27(3):491--499.
+
+\bibitem{Anders2015}
+Anders S, Pyl PT, Huber W.
+\newblock HTSeq—a Python framework to work with high-throughput
+sequencing
+  data.
+\newblock Bioinformatics. 2015;31(2):166--169.
+
+\bibitem{Storey2015}
+Storey JD, Bass AJ, Dabney A, Robinson D. qvalue: Q-value estimation
+for false
+  discovery rate control; 2015.
+\newblock Available from: \url{http://github.com/jdstorey/qvalue}.
+
+\bibitem{Huggins2011}
+Huggins P, Zhong S, Shiff I, Beckerman R, Laptenko O, Prives C, et~al.
+\newblock {DECOD}: fast and accurate discriminative {DNA} motif
+finding.
+\newblock Bioinformatics. 2011;27(17):2361--2367.
+
+\bibitem{Elemento2007}
+Elemento O, Slonim N, Tavazoie S.
+\newblock A universal framework for regulatory element discovery
+across all
+  genomes and data types.
+\newblock Mol Cell. 2007;28(2):337--350.
+
+\bibitem{Goodarzi2012}
+Goodarzi H, Najafabadi HS, Oikonomou P, Greco TM, Fish L, Salavati R,
+et~al.
+\newblock Systematic discovery of structural elements governing
+stability of
+  mammalian messenger {RNAs}.
+\newblock Nature. 2012;485(7397):264--268.
+
+\bibitem{Li2010}
+Li X, Quon G, Lipshitz HD, Morris Q.
+\newblock Predicting in vivo binding sites of {RNA-binding} proteins
+using
+  {mRNA} secondary structure.
+\newblock RNA. 2010;16(6):1096--1107.
+
+\bibitem{Ray2013}
+Ray D, Kazan H, Cook KB, Weirauch MT, Najafabadi HS, Li X, et~al.
+\newblock A compendium of {RNA-binding} motifs for decoding gene
+regulation.
+\newblock Nature. 2013;499(7457):172--177.
+
+\bibitem{McLeay2010}
+McLeay RC, Bailey TL.
+\newblock Motif Enrichment Analysis: a unified framework and an
+evaluation on
+  {ChIP} data.
+\newblock BMC Bioinformatics. 2010;11:165.
+
+\bibitem{Lawrence2013}
+Lawrence M, Huber W, Pages H, Aboyoun P, Carlson M, Gentleman R,
+et~al.
+\newblock Software for computing and annotating genomic ranges.
+\newblock PLoS computational biology. 2013;9(8):e1003118.
+
+\bibitem{Pelechano2014}
+Pelechano V, Wei W, Jakob P, Steinmetz LM.
+\newblock Genome-wide identification of transcript start and end sites
+by
+  transcript isoform sequencing.
+\newblock Nat Protoc. 2014;9(7):1740--1759.
+
+\bibitem{Freeberg2013}
+Freeberg MA, Han T, Moresco JJ, Kong A, Yang YC, Lu ZJ, et~al.
+\newblock Pervasive and dynamic protein binding sites of the {mRNA}
+  transcriptome in Saccharomyces cerevisiae.
+\newblock Genome Biol. 2013;14(2):R13.
+
+\bibitem{Mcisaac2013}
+McIsaac RS, Silverman SJ, Parsons L, Xu P, Briehof R, McClean MN,
+et~al.
+\newblock Visualization and analysis of mRNA molecules using
+fluorescence in
+  situ hybridization in Saccharomyces cerevisiae.
+\newblock Journal of visualized experiments: JoVE. 2013;(76).
+
+\bibitem{Cock2009}
+Cock PJA, Antao T, Chang JT, Chapman BA, Cox CJ, Dalke A, et~al.
+\newblock Biopython: freely available Python tools for computational
+molecular
+  biology and bioinformatics.
+\newblock Bioinformatics. 2009;25(11):1422--1423.
+
+\bibitem{Li2013}
+Li H.
+\newblock Aligning sequence reads, clone sequences and assembly
+contigs with
+  {BWA-MEM}.
+\newblock arXiv. 2013; p. 1303.3997.
+
+\bibitem{Team2000}
+Team RC.
+\newblock R language definition.
+\newblock Vienna, Austria: R foundation for statistical computing.
+2000;.
+
+\bibitem{Yu2012}
+Yu G, Wang LG, Han Y, He QY.
+\newblock clusterProfiler: an R package for comparing biological
+themes among
+  gene clusters.
+\newblock Omics: a journal of integrative biology.
+2012;16(5):284--287.
+
+\bibitem{Presnyak2015}
+Presnyak V, Alhusaini N, Chen YH, Martin S, Morris N, Kline N, et~al.
+\newblock Codon optimality is a major determinant of {mRNA} stability.
+\newblock Cell. 2015;160(6):1111--1124.
+
+\bibitem{Stacklies2007}
+Stacklies W, Redestig H, Scholz M, Walther D and Selbig J.
+\newblock pcaMethods – a Bioconductor package providing PCA methods for incomplete data.
+\newblock Bioinformatics. 2007;23:1164–-1167.
+
+\end{thebibliography}
+%\bibliography{scripts/miller2018_references}
+
+% Place figure captions after the first paragraph in which they are cited.
+%\begin{figure}[!h]
+%\caption{{\bf Bold the figure title.}
+%Figure caption text here, please use this space for the figure panel descriptions instead of using subfigure commands. A: Lorem ipsum dolor sit amet. B: Consectetur adipiscing elit.}
+%\label{fig1}
+%\end{figure}
+% Place tables after the first paragraph in which they are cited.
+%\begin{table}[!ht]
+%\begin{adjustwidth}{-2.25in}{0in} % Comment out/remove adjustwidth environment if table fits in text column.
+%\centering
+%\caption{
+%{\bf Table caption Nulla mi mi, venenatis sed ipsum varius, volutpat euismod diam.}}
+%\begin{tabular}{|l+l|l|l|l|l|l|l|}
+%\hline
+%\multicolumn{4}{|l|}{\bf Heading1} & \multicolumn{4}{|l|}{\bf Heading2}\\ \thickhline
+%$cell1 row1$ & cell2 row 1 & cell3 row 1 & cell4 row 1 & cell5 row 1 & cell6 row 1 & cell7 row 1 & cell8 row 1\\ \hline
+%$cell1 row2$ & cell2 row 2 & cell3 row 2 & cell4 row 2 & cell5 row 2 & cell6 row 2 & cell7 row 2 & cell8 row 2\\ \hline
+%$cell1 row3$ & cell2 row 3 & cell3 row 3 & cell4 row 3 & cell5 row 3 & cell6 row 3 & cell7 row 3 & cell8 row 3\\ \hline
+%\end{tabular}
+%\begin{flushleft} Table notes Phasellus venenatis, tortor nec vestibulum mattis, massa tortor interdum felis, nec pellentesque metus tortor nec nisl. Ut ornare mauris tellus, vel dapibus arcu suscipit sed.
+%\end{flushleft}
+%\label{table1}
+%\end{adjustwidth}
+%\end{table}
+
+\end{document}

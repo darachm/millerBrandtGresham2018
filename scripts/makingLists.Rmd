@@ -1,0 +1,48 @@
+---
+title: "Just making a handy list for converting names"
+author: "Darach"
+date: "`r Sys.Date()`"
+---
+
+```{r}
+library(tidyverse)
+SGD <- read_tsv("../data/SGD_features_170601.tab",col_names=F) %>% 
+  filter(X2%in%c("ORF","tRNA_gene","snoRNA_gene",
+    "rRNA_gene","ncRNA_gene","psuedogene","snRNA_gene")) %>%
+  mutate(SGDID=X1,Systematic=X4,Common=X5) %>% 
+  mutate(Common=ifelse(is.na(X5),X4,X5))
+
+any(duplicated(SGD$Systematic))
+any(duplicated(SGD$Common))
+any(duplicated(SGD$SGDID))
+
+renameSystematicToCommon <- SGD$Common
+names(renameSystematicToCommon) <- SGD$Systematic
+renameCommonToSystematic <- SGD$Systematic
+names(renameCommonToSystematic) <- SGD$Common
+renameSystematicToSGDID <- SGD$SGDID
+names(renameSystematicToSGDID) <- SGD$Systematic
+
+sysToCommon <- function(x) renameSystematicToCommon[x]
+commonToSystematic <- function(x) renameCommonToSystematic[x]
+sysToSGD <- function(x) renameSystematicToSGDID[x]
+sgdToCommon <- function(x) renameSystematicToCommon[
+  names(renameSystematicToSGDID[which(renameSystematicToSGDID==x)])
+  ]
+
+save(file="../tmp/NameIDList.RData",
+  list=c("SGD"
+    ,"renameCommonToSystematic"
+    ,"renameSystematicToCommon"
+    ,"renameSystematicToSGDID"
+    ,"sysToSGD"
+    ,"sgdToCommon"
+  ))
+
+```
+
+
+```{r}
+sessionInfo()
+```
+

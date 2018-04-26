@@ -1,0 +1,397 @@
+---
+title: "modeling the dme209 data to analyze strain GAP1 signal,
+  using a mle log normal approach..."
+author: "Darach"
+date: "`r Sys.Date()`"
+---
+
+# preliminaries and loading
+
+
+```{r,eval=T,message=F}
+library(tidyverse)
+library(stringr)
+library(pcaMethods)
+library(ggrepel)
+library(stats4)
+library(Cairo)
+library(multidplyr)
+load(file="../tmp/dme209modelingDat.RData")
+```
+
+Here's the data we're using for the modeling. It's already processed
+and filtered by the `importAndQC` script.
+
+```{r,loadingupData,cache=T,eval=T}
+sortdat <- modelingdat%>%filter(FACSGate!="input") %>%
+  mutate(GateIndex=c(p2=1,p3=2,p4=3,p5=4
+    ,p6=1,p7=2,p8=3,p9=4)[as.character(FACSGate)]
+    ) %>%
+  group_by(Metric,Strain,Common,BiologicalReplicate,Shifted
+    ,GateIndex,FACSGate
+    )%>%
+  summarize(MeanPsuedoEvents=mean(PsuedoEvents,na.rm=T))%>%
+  ungroup()
+
+boundslist <- modelingdat %>% 
+  select(Shifted,FACSGate,LowerBound,UpperBound) %>%
+  distinct%>%filter(FACSGate!="input")%>%
+  mutate(GateIndex=c(p2=1,p3=2,p4=3,p5=4
+    ,p6=1,p7=2,p8=3,p9=4)[as.character(FACSGate)]
+    ) %>% 
+  group_by(Shifted,GateIndex)%>%
+  summarize(BoundsVector=list(
+      c(LowerBound=LowerBound,UpperBound=UpperBound)
+      )
+    ) %>%
+  group_by(Shifted) %>%
+  arrange(GateIndex)%>%
+  summarize(GateList=list(BoundsVector)) %>%
+  ungroup()%>%
+  summarize(ShiftList=list(setNames(GateList,nm=Shifted))) %>%
+  pull(ShiftList) %>% unlist(recursive=F)
+
+```
+
+```{r}
+write_lines("#
+# Supplementary Table
+#
+# The BFF data used for modeling GAP1 per strain. 
+#
+# Key:
+# Biological replicate , gate index (low 1 to high APC.A GAP1 signal 4) , FACS gate name , pre or post-shift , systematic name of gene knocked out , common name of gene knocked out , mean pseudoevents for this strain in this bin"
+  ,path="../output/Figure4_Table_BFFmodelingData.csv")
+sortdat %>% filter(Metric=="EstInput") %>%
+  dplyr::select(BiologicalReplicate,GateIndex,FACSGate
+    ,Shifted,Strain,Common
+    ,MeanPsuedoEvents
+    ) %>%
+  write_csv(path="../output/Figure4_Table_BFFmodelingData.csv"
+    ,append=T)
+
+modelingdat %>% 
+  select(Shifted,FACSGate,LowerBound,UpperBound) %>%
+  distinct%>%filter(FACSGate!="input")%>%
+  mutate(GateIndex=c(p2=1,p3=2,p4=3,p5=4
+    ,p6=1,p7=2,p8=3,p9=4)[as.character(FACSGate)]
+    ) %>%arrange(Shifted,GateIndex)
+
+# See table 15
+ 
+```
+
+# The model
+
+We're going to fit a single log-normal to the data. I tried more
+complicated models, specifically a pair of log normals and a
+log normal with a uniform in the middle (a la S-phase models),
+but they fit weirdly with a great propensity to shoot off in
+one direction with half of the model and no penalty function
+for spreading. 
+
+So I'm going to constrain outselves to a single log normal, because
+it ought to approximate the data. I belive there is honest variation
+from this, but don't think we have enough data to detect that 
+reliably.
+By the way, by log normal I mean I'm fitting the model in log-space.
+
+Also, I'm fitting to the mean of the technical replicates here.
+
+```{r,modelOfSingleLogNormalAndDebuggingPlots,eval=T,cache=T,warning=F}
+# These functions give us the density in an interval for the normal
+# and logistic distributions.
+pintervalLogistic <- function(gate,bounds,fitparm1,fitparm2) {
+  return(
+    plogis(log(bounds[["UpperBound"]])
+      ,location=fitparm1,scale=fitparm2
+      ) 
+    -
+    plogis(log(bounds[["LowerBound"]])
+      ,location=fitparm1,scale=fitparm2
+      ) 
+    )
+}
+pintervalNormal <- function(gate,bounds,fitparm1,fitparm2) {
+  return(
+    pnorm(log(bounds[["UpperBound"]])
+      ,mean=fitparm1,sd=fitparm2
+      ) 
+    -
+    pnorm(log(bounds[["LowerBound"]])
+      ,mean=fitparm1,sd=fitparm2
+      ) 
+    )
+}
+
+fitLogModel <- function(thisDatar
+                        ,ShiftedOrNot
+                        ,lowerlimits=c(7,0.2) 
+                        ,upperlimits=c(10,2.0)
+                        ,pintervalModel=NA) { 
+  if (!is.function(pintervalModel)) stop("Gimme an interval model to use")
+# This is to set any missing observations as 0
+  missingValues <- as.character(base::setdiff(c(1,2,3,4),names(thisDatar)))
+  for (i in missingValues) thisDatar[[i]] <- 0
+# We select the proper bounds from our list
+  bounds <- boundslist[[ShiftedOrNot]]
+# and define a fit function  that returns the loglikelihood
+  fitfunc <- function(fitparm1,fitparm2) {
+    pz <- c(pintervalModel(1,bounds[[1]],fitparm1,fitparm2)
+      ,pintervalModel(2,bounds[[2]],fitparm1,fitparm2)
+      ,pintervalModel(3,bounds[[3]],fitparm1,fitparm2)
+      ,pintervalModel(4,bounds[[4]],fitparm1,fitparm2)
+      )
+    ll <- c(thisDatar[["1"]]*log(pz[1]),thisDatar[["2"]]*log(pz[2])
+      ,thisDatar[["3"]]*log(pz[3]),thisDatar[["4"]]*log(pz[4])
+      )
+    ll[!is.finite(ll)] <- -36
+    return(-sum(ll,na.rm=T))
+  }
+# debugging
+#return(c(fitfunc(7,0.5),fitfunc(7.5,0.5),fitfunc(8,.5)))
+# We make a guess  of the starting mean to use
+  startMean <- log(
+    weighted.mean(
+      unlist(lapply(boundslist[[1]],mean))
+      ,c(thisDatar[[1]],thisDatar[[2]],thisDatar[[3]],thisDatar[[4]])
+      )
+   )
+# And the actual fit
+  thisFit <- try(
+    mle(minuslogl=fitfunc
+      ,start=list(fitparm1=startMean,fitparm2=1.00)
+      ,control=list(maxit=1000,trace=0)
+      ,method="L-BFGS-B"
+      ,lower=lowerlimits,upper=upperlimits
+      )
+    )
+# For errors
+  if (is(thisFit)=="try-error") return()
+#debuggin
+#return(thisFit)
+# Here, we calculate the predicted proportions
+  pz <- c(pintervalModel(1,bounds[[1]],coef(thisFit)[1],coef(thisFit)[2])
+    ,pintervalModel(2,bounds[[2]],coef(thisFit)[1],coef(thisFit)[2])
+    ,pintervalModel(3,bounds[[3]],coef(thisFit)[1],coef(thisFit)[2])
+    ,pintervalModel(4,bounds[[4]],coef(thisFit)[1],coef(thisFit)[2])
+    )
+  obs <- c(thisDatar[["1"]],thisDatar[["2"]],thisDatar[["3"]],thisDatar[["4"]])
+  residz <- pz-obs/sum(obs,na.rm=T)
+  return(list(Model=thisFit,SSE=sum(residz^2,na.rm=T)
+    ,obsNormed=c(obs/sum(obs,na.rm=T)),modeledPz=c(pz)
+    ,logLikely=logLik(thisFit)))
+}
+# 
+# Sanity checks
+#
+
+z <- sortdat %>% 
+  filter(Strain%in%c("YOR202W","YKR039W")) %>%
+#  mutate(BiologicalReplicate="Pooled") %>%
+  group_by(Metric,Strain,Common,Shifted,GateIndex,BiologicalReplicate) %>%
+  summarize(SumMeanPsuedoEvents=sum(MeanPsuedoEvents,na.rm=T)) %>% 
+  group_by(Metric,Strain,Common,Shifted,BiologicalReplicate) %>%
+  mutate(PropInEachBin=SumMeanPsuedoEvents/sum(SumMeanPsuedoEvents,na.rm=T)) %>%
+  group_by(Metric,Strain,Common,Shifted,BiologicalReplicate) %>%
+  summarize(PropsList=list(setNames(PropInEachBin,nm=GateIndex))) %>% 
+  mutate(
+    Normal=map2(PropsList,Shifted
+      ,fitLogModel
+      ,lowerlimits=c(7,0.2),upperlimits=c(10,2.0)
+      ,pintervalModel=pintervalNormal
+      )
+    ,
+    Logistic=map2(PropsList,Shifted
+      ,fitLogModel
+      ,lowerlimits=c(7,0.2),upperlimits=c(10,2.0)
+      ,pintervalModel=pintervalLogistic
+      )
+    )%>%
+  gather(ModelType,RawReturn,Normal,Logistic) %>%
+  rowwise()%>%
+  mutate(LogMiddle=coef(RawReturn[[1]])[1]
+    ,LogSpread=coef(RawReturn[[1]])[2]
+    ,SSE=RawReturn[[2]]
+    ,logLikely=RawReturn[[5]]
+    )%>%
+  select(-RawReturn)
+
+z %>% gather(Variable,Value,LogMiddle,LogSpread,SSE,logLikely) %>%
+  ggplot()+
+  facet_grid(Variable+Strain~Shifted+Metric,scales="free")+
+  aes(x=factor(Shifted):factor(ModelType)
+    ,y=Value,col=BiologicalReplicate)+
+  geom_point()+
+  theme(axis.text.x=element_text(angle=90))
+
+```
+
+Well, this is a very similar result. But I do think the normal's the
+way to go. Also, the umi-saturation-adjusted `EstInput` should be
+the estimate used for the modeling. 
+
+For memory purposes (since I don't want to have to re-implement this
+on the HPC and I'm running this on a T420 with 8GB theoretical RAM),
+I'm going just use this metric (`EstInput`) and only try the 
+normal vs logistic on the pooled models.
+
+```{r,initcluster,cache=F,eval=T}
+cluster3 <- create_cluster(3)
+cluster_library(cluster3,c("tidyverse","stats4"))
+cluster_copy(cluster3,pintervalNormal)
+cluster_copy(cluster3,pintervalLogistic)
+cluster_copy(cluster3,fitLogModel)
+cluster_copy(cluster3,boundslist)
+```
+
+```{r,fiteverythingPooled,cache=T,eval=T,warning=F}
+system.time(
+pooledModels <- sortdat %>% 
+#filter(Strain%in%unique(sortdat$Strain)[1:100])%>% #for debugging
+  filter(Metric=="EstInput")%>%
+  mutate(BiologicalReplicate="Pooled") %>%
+  group_by(Metric,Strain,Common,Shifted,GateIndex,BiologicalReplicate) %>%
+  summarize(SumMeanPsuedoEvents=sum(MeanPsuedoEvents,na.rm=T)) %>% 
+  group_by(Metric,Strain,Common,Shifted,BiologicalReplicate) %>%
+  mutate(PropInEachBin=SumMeanPsuedoEvents/sum(SumMeanPsuedoEvents,na.rm=T)) %>%
+  group_by(Metric,Strain,Common,Shifted,BiologicalReplicate) %>%
+  summarize(PropsList=list(setNames(PropInEachBin,nm=GateIndex))) %>% 
+  partition(cluster=cluster3) %>%
+  mutate(
+    Normal=map2(PropsList,Shifted
+      ,fitLogModel
+      ,lowerlimits=c(6.6,0.2),upperlimits=c(11,2.0)
+      ,pintervalModel=pintervalNormal
+      )
+    ,
+    Logistic=map2(PropsList,Shifted
+      ,fitLogModel
+      ,lowerlimits=c(6.6,0.2),upperlimits=c(11,2.0)
+      ,pintervalModel=pintervalLogistic
+      )
+    ) %>% 
+  collect () %>%
+  gather(ModelType,RawReturn,Normal,Logistic) %>%
+  rowwise() %>%
+  filter(!is.null(RawReturn)) %>%
+  mutate(LogMiddle=coef(RawReturn[[1]])[1]
+    ,LogSpread=coef(RawReturn[[1]])[2]
+    ,SSE=RawReturn[[2]]
+    ,logLikely=RawReturn[[5]]
+    )%>%
+  select(-RawReturn) %>%
+  select(Metric,Strain,Common,Shifted,BiologicalReplicate
+    ,ModelType,LogMiddle,LogSpread,SSE,logLikely) %>%
+  arrange(Strain,Common,Metric,Shifted,ModelType,BiologicalReplicate)
+)
+gc()
+```
+
+```{r,fiteverythingReps,cache=T,eval=T,warning=F}
+system.time(
+repsModels <- sortdat %>% 
+#filter(Strain%in%unique(sortdat$Strain)[1:100])%>% #for debugging
+  filter(Metric=="EstInput")%>%
+  group_by(Metric,Strain,Common,Shifted,GateIndex,BiologicalReplicate) %>%
+  summarize(SumMeanPsuedoEvents=mean(MeanPsuedoEvents,na.rm=T)) %>% 
+  group_by(Metric,Strain,Common,Shifted,BiologicalReplicate) %>%
+  mutate(PropInEachBin=SumMeanPsuedoEvents/sum(SumMeanPsuedoEvents,na.rm=T)) %>%
+  group_by(Metric,Strain,Common,Shifted,BiologicalReplicate) %>%
+  summarize(PropsList=list(setNames(PropInEachBin,nm=GateIndex))) %>% 
+  partition(cluster=cluster3) %>%
+  mutate(
+    Normal=map2(PropsList,Shifted
+      ,fitLogModel
+      ,lowerlimits=c(6.6,0.2),upperlimits=c(11,2.0)
+      ,pintervalModel=pintervalNormal
+      )
+    ) %>% 
+  collect () %>%
+  gather(ModelType,RawReturn,Normal) %>%
+  rowwise()%>%
+  filter(!is.null(RawReturn)) %>%
+  mutate(LogMiddle=coef(RawReturn[[1]])[1]
+    ,LogSpread=coef(RawReturn[[1]])[2]
+    ,SSE=RawReturn[[2]]
+    ,logLikely=RawReturn[[5]]
+    )%>%
+  select(-RawReturn) %>%
+  select(Metric,Strain,Common,Shifted,BiologicalReplicate
+    ,ModelType,LogMiddle,LogSpread,SSE,logLikely) %>%
+  arrange(Strain,Common,Metric,Shifted,ModelType,BiologicalReplicate)
+)
+gc()
+```
+
+```{r,bringModelsTogether,cache=F,eval=T}
+save(pooledModels,file="../tmp/dme209_cache_pooledModels.RData")
+save(repsModels,file="../tmp/dme209_cache_repsModels.RData")
+allModels <- bind_rows(repsModels,pooledModels)
+try(rm(pooledModels))
+try(rm(repsModels))
+gc()
+```
+
+```{r,saveModels,cache=F}
+save(allModels,file="../tmp/dme209_allModels.RData")
+```
+
+Let's take a peak.
+
+```{r,modelingSummaries,cache=T}
+allModels %>% mutate(LogSSE=log(SSE))%>%
+  gather(Variable,Value,LogMiddle,LogSpread,LogSSE) %>%
+  ggplot()+
+  facet_grid(BiologicalReplicate+ModelType~Shifted+Variable,scales="free")+
+  aes(x=Value)+
+  geom_histogram(bins=100)
+```
+
+The logistic and normal of the pooled samples look really similar.
+
+```{r,modelingSummaries2,cache=T}
+allModels %>% 
+  filter(BiologicalReplicate=="Pooled")%>%
+  select(ModelType,LogMiddle,Shifted,Strain) %>%
+  spread(ModelType,LogMiddle)%>%
+  ggplot()+
+  facet_wrap(~Shifted,scales="free")+
+  aes(x=Normal,y=Logistic)+geom_point()
+
+allModels %>% 
+  filter(BiologicalReplicate=="Pooled")%>%
+  select(ModelType,LogMiddle,Shifted,Strain) %>%
+  spread(ModelType,LogMiddle)%>%
+  do(data.frame(
+      Pearson=cor(x=.$Normal,y=.$Logistic,use="complete.obs",method="pearson")
+      ,Spearman=cor(x=.$Normal,y=.$Logistic,use="complete.obs",method="spearman")
+      )
+    )
+```
+
+Well, it looks like they agree really well. There's a bit of 
+divergence you can see on the tails ,but that's only a few that
+might be a bigger difference.
+
+So I'm just going to pick calling it a log-normal model, because
+that's a lot easier to communicate, and I think it should be more
+stable against things jackpotting out on the tails of the 
+distribution due to noise.
+
+Also, I'm going to just use the `EstInput` metric, since I previously
+established that that seems to be a better consistency estimator
+than the raw counts (see `dme209importAndQC`).
+
+```{r,saveModelsToConsider}
+modelsToConsider <- allModels %>% 
+  filter(Metric=="EstInput",ModelType=="Normal") %>%
+  select(-Metric,-ModelType)
+save(modelsToConsider,file="../tmp/dme209_modelsToConsider.RData")
+```
+
+
+```{r}
+sessionInfo()
+```
+

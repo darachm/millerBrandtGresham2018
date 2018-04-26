@@ -1,0 +1,9 @@
+output/
+html_reports/
+tmp/
+scripts/ATS-motif-prediction/
+shiny/appdata/
+*zip
+data/
+plos_submission
+scripts/*_cache

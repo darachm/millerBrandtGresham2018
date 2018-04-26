@@ -1,0 +1,457 @@
+---
+title: "This makes Figure 2"
+author: "Darach"
+date: "`r Sys.Date()`"
+---
+
+```{r,libraries,cache=F}
+library(tidyverse)
+library(knitr)
+library(stringr)
+library(plyr)
+library(ggrepel)
+library(gtable)
+load("../tmp/NameIDList.RData")
+load("../tmp/dme211decayvsdynamics.RData")
+dme211decayvsdynamics <- dme211decayvsdynamics %>% 
+  mutate(Common=renameSystematicToCommon[Systematic])
+load("../tmp/airoldiEtAl2016MBoCTableS7Melty.RData")
+load("../tmp/dme211datarForModeling.RData")
+load("../tmp/dme211fitModels.RData")
+load("../tmp/dme211fitModelsDirect.RData")                
+load("../tmp/dme211modelingResultTable.RData")
+```
+
+```{r}
+multiPlot <- function(x) {
+  plotDatar <- subset(datarForModeling,Systematic%in%x&NormedDirect!=0)
+  plotDatar <- ddply(plotDatar,.(Systematic),function(x){return(
+      data.frame(x,fitted=fitted.values(modelzAltNorm[unique(as.character(x$Systematic))][[1]]))
+    )})
+  plotDatar <- plotDatar%>%
+    mutate(Name=factor(Systematic,levels=x))%>%
+    arrange(as.numeric(Name))%>%
+    mutate(Common=factor(Common,levels=unique(Common)))
+  return(ggplot(plotDatar)+aes(x=Minutes,group=Treatment)+
+    facet_wrap(~Common,scales="free_y",ncol=1,strip.position="right")+
+    geom_line(aes(y=fitted,group=Treated,lty=Treated))+
+    geom_point(aes(y=log(NormedModel),col=Treatment),size=0.8)+
+    theme_classic()+
+    geom_vline(xintercept=12.5,linetype="dotted",color="black",alpha=1.0)+
+    xlab("Minutes of chase")+
+    ylab("ln(normalized 4tU-labeled abundance)")+
+    scale_linetype_discrete(guide=F,palette=function(x){c("solid","dashed")})+
+    scale_color_discrete("Treatment",labels=c(w="Mock (water)",q="Glutamine"))+
+    theme(legend.position="bottom")
+  )
+}
+multiPlot(renameCommonToSystematic[c("GAP1","GUA1","HTA1")])
+```
+
+How about HAC1 / IRE1? Check out the shiny application.
+It doesn't look destabilized.
+
+```{r}
+null <- ggplot()+theme_void()
+
+namez <- c("HTA1","GAP1","DAL5","MEP2","PYK2","PYC1","TPS1","TPS2")
+fig2a <- multiPlot(renameCommonToSystematic[namez])+
+  facet_wrap(~Common,ncol=2,strip.position="right")+
+  theme(strip.text = element_text(face = "italic")) +
+  theme(text=element_text(size=10))+
+  theme(legend.position="bottom")
+fig2a
+
+labz <- fig2a +
+  geom_label(data=data.frame(x=c(07,20,07,20),y=-2
+      ,label=c("Pre-upshift","Post-upshift","Pre-upshift","Post-upshift")
+      ,Common=c("HTA1","HTA1","GAP1","GAP1")
+      )
+    ,aes(x=x,y=y,label=label,group=NA),col="black")
+labzGrob <- ggplotGrob(labz)
+
+renamingVector <- c( HTA1="white"
+    ,GAP1="#56B4E9" ,DAL5="#56B4E9" ,MEP2="#56B4E9"
+    ,PYK2="#E69F00" ,PYC1="#E69F00"
+    ,TPS1="#F0E442" ,TPS2="#F0E442"
+  )
+
+fig2aGrob <- ggplotGrob(fig2a)
+for (i in 1:length(fig2aGrob$grobs)){
+  if (grepl("strip",fig2aGrob$grobs[[i]]$name)) {
+  try(
+  fig2aGrob$grobs[[i]]$grobs[[1]]$children[[1]]$gp$fill <- 
+    renamingVector[
+      fig2aGrob$grobs[[i]]$grobs[[1]]$children[[2]]$children[[1]]$label
+      ]
+  )
+  }
+}
+grid::grid.newpage()
+grid::grid.draw(fig2aGrob)
+
+dummyGrob <- ggplotGrob( ggplot(
+  data.frame(x=1,name=names(renamingVector[-1]),color=renamingVector[-1]))+
+  aes(fill=color,x=x)+geom_histogram()+theme_void()+
+  scale_fill_manual("",labels=c("NCR transporter"
+      ,"Pyruvate\ncatabolism","Trehalose\nbiosynthesis")
+    ,values=unique(renamingVector[-1]))+
+  theme(text=element_text(size=10))+
+  guides(fill=guide_legend(ncol=3)) 
+  )
+facetLegend <- dummyGrob$grobs[[15]]
+
+#namez <- c("DAL5","DIP5","MEP2","PUT4")
+#namez <- c("IMD2","IMD3","IMD4","GUA1")
+#namez <- c("PYK2","PYC1","DAL7","MAE1")#"GLK1",
+#malate
+#namez <- c("VNX1","HXT5","CAN1","NCE102","DAL4","DUR3","PHM7")
+# some transporters
+# pkc1 ... ?
+#namez <- c("LSP1","STT4")
+#namez <- c("NSR1","TPO2","MAE1")
+# stabilized, check this
+
+```
+
+
+```{r}
+
+# refactoring
+ylimz <- c(-0.1,0.3)
+xlimz <- c(-0.2,0.4)# xlimz <- c(-0.4,0.2)
+tmpplotdat <- dme211decayvsdynamics %>% arrange(desc(Class))
+fig2b_scatter <- ggplot(tmpplotdat)+theme_classic()+
+  aes(x=-TotalRateOfDecayUponUpshift,y=-BasalRate_Estimate
+    ,col=Class,alpha=!(Class=="NoChange"))+
+  geom_vline(xintercept=0,col="grey70")+
+  geom_hline(yintercept=0,col="grey70")+
+  geom_point(size=0.3)+
+  xlab("")+
+  ylab(expression(atop("Pre-upshift","degradation rate ("*min^-1*")")))+
+  scale_color_manual("Upon upshift...",labels=c( `Stabilized`="Stabilized",
+    `Destabilized`="Destabilized", `NoChange`="No significant change"),
+    values=c( `Stabilized`="blue", `Destabilized`="red", `NoChange`="grey50"))+
+  guides(col=F,alpha=F)+
+  theme(text=element_text(size=10)
+    ,axis.text.y=element_text(margin=margin(r=5))
+    )+
+  scale_alpha_discrete(range=c(0.3,1))+
+  scale_x_continuous(breaks=seq(-1,1,.2),limits=xlimz)+
+  scale_y_continuous(breaks=seq(-1,1,.2),limits=ylimz)
+fig2b_tophist <- ggplot(tmpplotdat)+
+  aes(x=-TotalRateOfDecayUponUpshift)+
+  theme_classic()+theme(axis.text.x=element_blank() #,axis.ticks.x=element_blank()
+    ,axis.title.x=element_blank()
+    ,text=element_text(size=10))+xlab(NULL)+
+  geom_histogram(binwidth=0.01)+ylab("Count\n")+
+  geom_rug(data=tmpplotdat%>%filter(Class!="NoChange"),aes(col=Class))+
+  scale_color_manual("Upon upshift...",labels=c( `Stabilized`="Stabilized",
+    `Destabilized`="Destabilized", `NoChange`="No significant change"),
+    values=c( `Stabilized`="blue", `Destabilized`="red", `NoChange`="grey50"))+
+  guides(col=F)+
+  scale_x_continuous(breaks=seq(-1,1,.2),limits=xlimz)+
+  scale_y_continuous(breaks=c(0,150,300))
+fig2b_righthist <- ggplot(tmpplotdat)+
+  aes(x=-BasalRate_Estimate)+
+  coord_flip()+
+  theme_classic()+theme(axis.text.y=element_blank()
+    ,axis.ticks.y=element_blank()
+    ,axis.title.y=element_blank()
+    ,text=element_text(size=10))+
+  geom_histogram(binwidth=0.01)+ylab("Count")+
+  geom_rug(data=tmpplotdat%>%filter(Class!="NoChange"),aes(col=Class))+
+  scale_color_manual("Upon upshift...",labels=c( `Stabilized`="Stabilized",
+    `Destabilized`="Destabilized", `NoChange`="No significant change"),
+    values=c( `Stabilized`="blue", `Destabilized`="red", `NoChange`="grey50"))+
+  guides(col=F)+
+  scale_x_continuous(breaks=seq(-1,1,.2),limits=ylimz)+
+  scale_y_continuous(breaks=c(0,200,400))
+# unit margins are top, right, bottom, left
+fig2b_scatter <- fig2b_scatter+theme(plot.margin=unit(c(0,0,0,1.0),"cm"))
+fig2b_tophist <- fig2b_tophist+theme(plot.margin=unit(c(0.5,0,0,1.0),"cm"))
+fig2b_righthist <- fig2b_righthist+theme(plot.margin=unit(c(0,0.5,0,0),"cm"))
+#fig2c
+ylimz <- c(-0.45,0.2)
+tmpplotdat <- dme211decayvsdynamics %>% arrange(desc(Class))
+fig2c_scatter <- ggplot(tmpplotdat)+theme_classic()+
+  aes(x=-TotalRateOfDecayUponUpshift,y=-InitialFitRateOfAbundanceDecay
+    ,col=Class,alpha=!(Class=="NoChange"))+
+  geom_vline(xintercept=0,col="grey70")+
+  geom_hline(yintercept=0,col="grey70")+
+  geom_point(size=0.3)+
+  xlab(expression(atop("Post-upshift degradation","rate ("*min^-1*")")))+
+  ylab(expression(atop("mRNA abundance","change rate ("*min^-1*")")))+
+  scale_color_manual("",labels=c( `Stabilized`="Stabilized",
+    `Destabilized`="Destabilized", `NoChange`="No significant change"),
+    values=c( `Stabilized`="blue", `Destabilized`="red", `NoChange`="grey50"))+
+  theme(legend.position="bottom"
+    ,text=element_text(size=10)
+    ,axis.title.x=element_text(size=9)
+    ,legend.box.spacing=unit(0,"inch")
+    )+
+  guides(col=F,alpha=F)+
+#  guides(col=guide_legend(ncol=2),alpha=F)+
+  scale_alpha_discrete(range=c(0.3,1))+
+  scale_x_continuous(breaks=seq(-1,1,.2),limits=xlimz)+
+  scale_y_continuous(breaks=seq(-1,1,.2),limits=ylimz)
+fig2c_righthist <- ggplot(tmpplotdat)+
+  aes(x=-InitialFitRateOfAbundanceDecay)+
+  coord_flip()+
+  theme_classic()+theme(axis.text.y=element_blank()
+    ,axis.ticks.y=element_blank()
+    ,axis.title.y=element_blank()
+    ,text=element_text(size=10))+
+  geom_histogram(binwidth=0.01)+ylab("Count")+
+  geom_rug(data=tmpplotdat%>%filter(Class!="NoChange"),aes(col=Class))+
+  scale_color_manual("Upon upshift...",labels=c( `Stabilized`="Stabilized",
+    `Destabilized`="Destabilized", `NoChange`="No significant change"),
+    values=c( `Stabilized`="blue", `Destabilized`="red", `NoChange`="grey50"))+
+  guides(col=F)+
+  scale_x_continuous(breaks=seq(-1,1,.2),limits=ylimz)+
+  scale_y_continuous(breaks=c(0,150,300))+xlab(NULL)
+# unit margins are top, right, bottom, left
+fig2c_scatter <- fig2c_scatter+theme(plot.margin=unit(c(0,0,0.5,1.0),"cm"))
+fig2c_righthist <- fig2c_righthist+theme(plot.margin=unit(c(0,0.5,0,0),"cm"))
+#
+dummyGrob <- ggplotGrob( ggplot(tmpplotdat)+
+  aes(x=-TotalRateOfDecayUponUpshift,y=-TotalRateOfDecayUponUpshift
+    ,col=Class,alpha=!(Class=="NoChange"))+
+  scale_color_manual("",labels=c( `Stabilized`="Stabilized",
+    `Destabilized`="Destabilized", `NoChange`="No significant change"),
+    values=c( `Stabilized`="blue", `Destabilized`="red", `NoChange`="grey50"))+
+  geom_point()+
+  guides(col=guide_legend(ncol=2),alpha=F)+theme_void()
+  )
+fig2bc_legend <- dummyGrob$grobs[[15]]
+#
+a <- cowplot::plot_grid(
+  null,null,null
+  ,fig2b_scatter,null,fig2b_righthist
+  ,null,null,null
+  ,fig2c_scatter,null,fig2c_righthist
+  ,labels=c("","","","B","","","","","","C","","","","","")
+  ,hjust=-2.0
+  ,vjust=0
+  ,axis="b",align="h"
+  ,rel_widths=c(0.8,.02,.3),rel_heights=c(1.5,5,-1.3,5,1),ncol=3)
+b <- cowplot::plot_grid(
+  fig2b_tophist,null,null
+  ,fig2b_scatter,null,null
+  ,null,null,null
+  ,fig2c_scatter,null,null
+  ,axis="l",align="v"
+  ,rel_widths=c(0.8,.02,.3),rel_heights=c(1.5,5,-1.3,5,1),ncol=3)
+fig2bc <- cowplot::ggdraw(b)+cowplot::draw_plot(a)
+fig2bc
+g <- cowplot::plot_grid(
+  cowplot::plot_grid(
+    NULL
+    ,fig2aGrob
+#    ,ggplot(data.frame(x=c(0,1)))+aes(x=x)+
+#        geom_histogram(fill="white")+theme_void()+
+    ,facetLegend
+#    ,NULL
+    ,labels=c("A",""),ncol=1,rel_heights=c(.07,.8,.1))+
+      cowplot::draw_label("Pre-upshift",size=08,0.22,0.96,angle=30)+
+      cowplot::draw_label("Post-upshift",size=08,0.38,0.96,angle=30)+
+      cowplot::draw_label("Pre-upshift",size=08,0.64,0.96,angle=30)+
+      cowplot::draw_label("Post-upshift",size=08,0.80,0.96,angle=30)
+  ,cowplot::plot_grid(fig2bc,NULL,fig2bc_legend,ncol=1,rel_heights=c(.9,-.1,.1))
+  ,rel_widths=c(0.5,.5),nrow=1)+
+    annotate(geom="rect",xmin=0.85,xmax=0.865,ymin=0.395,ymax=0.43,fill="white")
+g
+ggsave("../output/Figure2.un.tiff",g,width=7,height=5)
+
+```
+
+```{r,prezi}
+g <- cowplot::plot_grid(fig2aGrob,facetLegend,ncol=1,rel_heights=c(.9,.1))
+
+x <- cowplot::plot_grid(
+  null,null
+  ,fig2c_scatter,fig2c_righthist
+  ,axis="b",align="h"
+  ,rel_widths=c(0.8,.3),rel_heights=c(1.5,5,5),ncol=2)
+y <- cowplot::plot_grid(
+  fig2b_tophist,null
+  ,fig2c_scatter,null
+  ,axis="l",align="v"
+  ,rel_widths=c(0.8,.3),rel_heights=c(1.5,5,5),ncol=2)
+g <- cowplot::ggdraw(y)+cowplot::draw_plot(x)
+```
+
+```{r,basehistogram}
+varnames <- c(`1_BasalRate_Estimate`="Basal rate,\nupon mock upshift (adding water)",
+  `ChangeRate_Estimate`="The change in rates between\nmock and glutamine upshift",
+  `2_Final`="Final rate,\nafter addition of glutamine")
+plotTable <- resultTable
+plotTable$Final <- plotTable$BasalRate_Estimate + plotTable$ChangeRate_Estimate
+tmp <- plotTable%>%select(BasalRate_Estimate,Final,ChangeRate_Estimate,Systematic,ChangeRate_QValue,Called)%>%
+  mutate(`2_Final`=Final) %>%
+  mutate(`1_BasalRate_Estimate`=BasalRate_Estimate) %>%
+  gather(variable,value,`1_BasalRate_Estimate`,`2_Final`,ChangeRate_Estimate)
+g <- ggplot(tmp)+
+  geom_histogram(binwidth=0.01,color="grey")+
+  aes(x=-value)+
+  xlab("Fit decay rates of labeled fraction\n(min^-1)")+
+  theme_classic()+ylab("Gene Features")+
+  facet_wrap(~variable,ncol=1,labeller=as_labeller(varnames))+
+  geom_rug(data=tmp%>%filter(Called!="NoChange"),
+    aes(col=Called),sides="b",size=1.0,alpha=0.5)+
+  scale_color_manual("Features called as change\nin degradation rate",
+    values=c(`AccelDeg`="red",Stabilized="blue"),
+    labels=c(`AccelDeg`="Accelerated\nmRNA degradation",Stabilized="Stabilized"))+
+  theme(legend.position="bottom")+
+  coord_cartesian(xlim=c(-.22,.38))+
+  guides(col=guide_legend(ncol=1))
+g
+```
+```{r}
+
+ggsave("../output/Figure2_S_histogram_raw.un.tiff",g
+  ,width=5,height=5)
+```
+
+```{r,eval=F,echo=F}
+dme211decayvsdynamics%>%
+  {cor(.$InitialFitRateOfAbundanceDecay
+    ,-(.$BasalRate_Estimate+.$ChangeRate_Estimate)
+    ,method="pearson",use="complete.obs"
+    )^2}
+```
+
+Then, trying to make plots of both dme211 and the Airoldi data on
+the same axis.
+
+```{r}
+
+
+g <- dme211decayvsdynamics %>%
+  filter(ChangeRate_QValue<0.01,ChangeRate_Estimate<BasalRate_Estimate)%>%
+  ggplot()+theme_bw()+
+  theme(legend.position="bottom")+
+  geom_vline(xintercept=0,col="gray",size=1)+
+  geom_hline(yintercept=0,col="gray",size=1)+
+  geom_abline(slope=-1,intercept=0,linetype="dashed")+
+  aes(x=-(BasalRate_Estimate+ChangeRate_Estimate),y=-InitialFitRateOfAbundanceDecay)+
+  geom_point(size=1.0)+
+  geom_text_repel(data=dme211decayvsdynamics%>%
+      filter(ChangeRate_QValue<0.01,ChangeRate_Estimate<BasalRate_Estimate)%>%
+      filter(BasalRate_Estimate+ChangeRate_Estimate<(-0.3)|
+          -InitialFitRateOfAbundanceDecay<(-0.2)|
+          -InitialFitRateOfAbundanceDecay>(-0.05)
+        )
+    ,aes(label=Common)
+    )+
+  ylab(expression(paste(atop("mRNA abundance change rate",paste(" (",min^-1,")")))))+
+  xlab(expression(paste("Estimated degradation rate (",min^-1,")")))+
+  scale_x_continuous(breaks=c(-0.3,-.2,-.1,0,.1,.2,.3))+
+  scale_y_continuous(breaks=c(-0.3,-.2,-.1,0,.1,.2,.3))
+g
+
+ggsave("../output/Figure2_S_justDestabilizedDecayvsDynamics.un.tiff",g
+  ,width=5,height=5)
+
+aFew <- dme211decayvsdynamics %>% 
+  filter(ChangeRate_QValue<0.01,ChangeRate_Estimate<BasalRate_Estimate)%>%
+  arrange(InitialFitRateOfAbundanceDecay) %>% pull(Systematic) %>%
+  "["(.,c(1:2,4:7)) 
+#aFew <- c("YBL047C","YBR221C","YDR133C","YOR321W","YOR347C","YGL197W")
+pdat <- mts7%>%filter(Systematic%in%aFew,
+      grepl("400uM Gln pulse",Sample)) %>%
+  mutate(Minutes=as.numeric(sub(".*=(\\d+) min$","\\1",Sample)),
+    Experiment="AiroldiEtAl2016",Signal=Ratio) %>% 
+  select(-Sample,-Gene,-Ratio) %>%
+  bind_rows(datarForModeling%>%filter(Systematic%in%aFew) %>%
+      mutate(Minutes=Minutes-12.5)%>%
+      mutate(Signal=NormedModel,Experiment="PulseChase") %>%
+      select(Systematic,Minutes,Signal,Experiment,Treatment)) %>%
+  distinct %>% mutate(Common=renameSystematicToCommon[Systematic])%>%
+  mutate(Model=modelzAltNorm[Systematic])%>%
+  rowwise()%>%
+  do(data.frame(
+      Systematic=.$Systematic
+      ,Minutes=.$Minutes
+      ,Experiment=.$Experiment
+      ,Signal=.$Signal
+      ,Treatment=.$Treatment
+      ,Common=.$Common
+      ,Intercept=coef(.$Model)[1]
+      ,Basal=coef(.$Model)[2]
+      ,Dynamic=coef(.$Model)[3]
+      )
+    ) %>%
+  mutate(Predicted=ifelse(Experiment!="AiroldiEtAl2016"
+      ,ifelse(Treatment=="w"
+        ,exp((Minutes)*Basal)
+        ,exp((Minutes)*(Basal+Dynamic))
+        )
+      ,NA
+      ))%>%
+  filter(Signal>0)%>%
+  mutate(Signal=ifelse(Experiment!="AiroldiEtAl2016",exp(log(Signal)-Intercept),Signal))
+g <- pdat %>% ggplot()+theme_classic()+
+  aes(x=Minutes,y=log(Signal),col=factor(Experiment):factor(Treatment))+
+  stat_smooth(data=pdat%>%filter(Experiment=="AiroldiEtAl2016")
+    ,method="lm",se=F,color="grey")+
+  geom_line(data=pdat,aes(x=Minutes,y=log(Predicted)
+    ,col=factor(Experiment):factor(Treatment)))+
+  geom_point()+facet_wrap(~Common,scales="free_y")+
+  scale_color_manual(""
+    ,values=c("red","blue"),na.value="black"
+    ,labels=c("Post-upshift","Pre-upshift","Abundance")
+    )+
+  theme(legend.position="bottom")+
+  ylab("Experimental signal,\n( normalized to 0 min )")+
+  xlim(0.5,17)
+g
+```
+
+```{r}
+ggsave("../output/Figure2_S_sixExamplesOfDestabilizationWithoutRepression.un.tiff",g
+  ,width=5,height=5)
+
+```
+
+
+```{r}
+#namez <- c("HTA1","GAP1","DAL5","MEP2","PYK2","PYC1","TPS1","TPS2")
+
+namez <- c("HTA1","GAP1")
+g <- multiPlot(renameCommonToSystematic[namez])+
+  facet_wrap(~Common,ncol=2)+theme_bw()+
+  theme(legend.position="bottom")
+g
+
+namez <- c("GAP1")
+g <- multiPlot(renameCommonToSystematic[namez])+
+  facet_wrap(~Common,ncol=2)+theme_bw()+
+  theme(legend.position="bottom")
+g
+
+namez <- c("MEP2","DAL5","PUT4","DUR3")
+g <- multiPlot(renameCommonToSystematic[namez])+
+  facet_wrap(~Common,ncol=2)+theme_bw()+
+  theme(legend.position="bottom")
+g
+
+namez <- c("TPS1","TPS2","TSL1","HXK1")
+g <- multiPlot(renameCommonToSystematic[namez])+
+  facet_wrap(~Common,ncol=2)+theme_bw()+
+  theme(legend.position="bottom")
+g
+
+namez <- c("GUA1","IMD2","IMD3","IMD4")
+g <- multiPlot(renameCommonToSystematic[namez])+
+  facet_wrap(~Common,ncol=2)+theme_bw()+
+  theme(legend.position="bottom")
+g
+
+```
+
+
+```{r}
+sessionInfo()
+```
+

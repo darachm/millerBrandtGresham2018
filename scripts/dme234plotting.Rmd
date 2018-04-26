@@ -1,0 +1,52 @@
+
+```{r}
+library(tidyverse)
+library(stringr)
+load("../plotting.RData")
+```
+
+
+```{r}
+
+AllPlot <- rbind(
+    DemuxComparison%>%select(-Barcode)%>%mutate(Demux="Demultiplexed"),
+    NoDemuxComparison%>%mutate(Demuxed=NA,Demux="Not demultiplexed"))%>%
+  gather(Type,Cor,PearsonCor,SpearmanCor)%>%
+  mutate(Parameter=as.numeric(ifelse(Tool=="bwa",
+    (56-as.numeric(Parameter))/6,Parameter)),
+    Dedup=ifelse(!Dedup,"No deduplication","Deduplicated"),
+    Demuxed=ifelse(Demuxed=="barnone","Barnone demultiplexing","Perfect-match\ndemultiplexing"),
+    Tool=ifelse(Tool=="barnone","Barnone\nstrain identification","bwa mem\nstrain identification"))
+AllPlot$Dedup <- factor(AllPlot$Dedup,levels=c("No deduplication","Deduplicated"))
+
+g<-ggplot(AllPlot%>%filter(Type=="PearsonCor",Demux=="Demultiplexed"))+
+  theme_bw()+
+  aes(x=factor(Parameter):factor(Rep),y=Cor,
+    group=factor(Parameter):factor(Rep),col=Rep,fill=Rep)+
+  facet_grid(Mutations~Tool+Demuxed+Dedup,scales="free_x")+
+  scale_y_continuous(breaks=seq(0,1,0.02),limits=c(NA,1))+
+  scale_x_discrete(labels=c(0,0,0,1,1,1,2,2,2,3,3,3,4,4,4,5,5,5))+
+  xlab("Allowed mismatches")+ylab("Pearson correlation to real data")+
+  ggtitle("Demultiplexed samples")+
+  geom_dotplot(binaxis="y",binwidth=0.001,stackdir="center")
+ggsave("demultiplexed170710.png",g,width=7,height=7)
+
+g<-ggplot(AllPlot%>%filter(Type=="PearsonCor",Demux=="Not demultiplexed"))+
+  theme_bw()+
+  aes(x=factor(Parameter):factor(Rep),y=Cor,
+    group=factor(Parameter):factor(Rep),col=Rep,fill=Rep)+
+  facet_grid(Mutations~Tool+Dedup,scales="free_x")+
+  scale_y_continuous(breaks=seq(0,1,0.005),limits=c(NA,1))+
+  scale_x_discrete(labels=c(0,0,0,1,1,1,2,2,2,3,3,3,4,4,4,5,5,5))+
+  xlab("Allowed mismatches")+ylab("Pearson correlation to real data")+
+  ggtitle("Samples not demultiplexed")+
+  geom_dotplot(binaxis="y",binwidth=0.001,stackdir="center")
+ggsave("notdemultiplexed170710.png",g,width=7,height=7)
+
+```
+
+
+
+
+
+

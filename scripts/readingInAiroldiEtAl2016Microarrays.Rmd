@@ -1,0 +1,40 @@
+---
+title: "Reading in the microarrays from the Airoldi et al 2016 MBoC paper"
+author: "Darach"
+date: "`r Sys.Date()`"
+---
+
+```{r, libs ,cache=F}
+library(tidyverse)
+library(stringr)
+```
+
+```{r, readingIn ,cache=F}
+dataDir <- "../data/airoldiEtAl2016MBoC/"
+ts7 <- read_csv(str_c(dataDir,"TableS7.csv"),col_types=cols(.default="c"))
+```
+
+Based on personal communication with David Gresham, it seems that 
+excel muddled the supplemental table and chopped off the 0min 
+timepoint for the Batch upshift. Here, we fix that:
+
+```{r,fixandsave,cache=F}
+names(ts7)[names(ts7)=="="] <- "Batch 400uM Gln pulse t=0 min"
+
+mts7 <- ts7 %>% gather(Sample,Log2Ratio,-Systematic,-Gene) %>%
+  mutate(Systematic=ifelse(Systematic=="null",NA,Systematic)) %>%
+  mutate(Gene=ifelse(Gene=="null",NA,Gene)) %>%
+  mutate(Log2Ratio=ifelse(Log2Ratio=="null",NA,Log2Ratio)) %>%
+  mutate(Ratio=2^as.numeric(Log2Ratio)) %>% select(-Log2Ratio) 
+
+ts7 <- mts7 %>% spread(Sample,Ratio)
+
+save(ts7,file="../tmp/airoldiEtAl2016MBoCTableS7.RData")
+save(mts7,file="../tmp/airoldiEtAl2016MBoCTableS7Melty.RData")
+
+```
+
+```{r}
+sessionInfo()
+```
+

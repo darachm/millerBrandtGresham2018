@@ -1,0 +1,1339 @@
+---
+title: "Analyzing the BFF screen results"
+author: "Darach"
+date: "`r Sys.Date()`"
+---
+
+This is the analysis of the BFF modeling results, looking for 
+mutants whose defects in estimated GAP1 mRNA abundance might
+shed light on what's regulating it.
+
+# Preliminaries and loading libraries
+
+```{r,eval=T,message=F}
+library(tidyverse)
+library(stringr)
+library(ggrepel)
+library(Cairo)
+load("../tmp/dme209_modelsToConsider.RData")
+load("../tmp/dme209modelingDat.RData")
+load("../tmp/NameIDList.RData")
+load("../tmp/dme211modelingResultTable.RData")
+```
+
+Here we read in the processed and modeled data, for use later.
+
+```{r,procingSortdat,cache=T}
+sortdat <- modelingdat%>%filter(FACSGate!="input") %>%
+  mutate(GateIndex=c(p2=1,p3=2,p4=3,p5=4
+    ,p6=1,p7=2,p8=3,p9=4)[as.character(FACSGate)]
+    ) %>%
+  group_by(Metric,Strain,Common,BiologicalReplicate,Shifted
+    ,GateIndex
+    )%>%
+  summarize(MeanPsuedoEvents=mean(PsuedoEvents,na.rm=T))%>%
+  ungroup()
+
+boundslist <- modelingdat %>% 
+  dplyr::select(Shifted,FACSGate,LowerBound,UpperBound) %>%
+  distinct%>%filter(FACSGate!="input")%>%
+  mutate(GateIndex=c(p2=1,p3=2,p4=3,p5=4
+    ,p6=1,p7=2,p8=3,p9=4)[as.character(FACSGate)]
+    ) %>% 
+  group_by(Shifted,GateIndex)%>%
+  summarize(BoundsVector=list(
+      c(LowerBound=LowerBound,UpperBound=UpperBound)
+      )
+    ) %>%
+  group_by(Shifted) %>%
+  arrange(GateIndex)%>%
+  summarize(GateList=list(BoundsVector)) %>%
+  ungroup()%>%
+  summarize(ShiftList=list(setNames(GateList,nm=Shifted))) %>%
+  pull(ShiftList) %>% unlist(recursive=F)
+```
+
+First thing we do is write out the table of all fit models.
+
+```{r}
+write_lines("#
+# Supplementary Table
+#
+# Parameters of all models fit to strains in BFF experiment, both
+# to each biological replicate seperately (A B C) or to the
+# sum of the mean pseudoevents across replicates (pooled).
+#
+# Key :
+# systematic name of gene knocked out , common name of gene knocked out , pre or post-shifted sample , biological replicate or pooled fit , natural log of the mean APC.A signal estimated , natural log of the standard deviation of the APC.A signal distribution , sum of square errors comparing the final model to the data used to fit it , the calculated log likelihood of the fit to the within-strain normalized data"
+  ,path="../output/Figure4_Table_BFFallFitModels.csv")
+modelsToConsider%>%arrange(Strain,BiologicalReplicate)%>%
+  write_csv(path="../output/Figure4_Table_BFFallFitModels.csv"
+    ,append=T)
+```
+
+To analyze these modeling results, I'm going to try and ascertain
+if there's some relationship between some simple metric of 
+measurementquality (like total counts or observations in a bin or 
+measurements taken) that separates out noisy fits more than others.
+Then we can apply that criteria to filter out the reliable models
+without having effects on the direction of results.
+
+Here we look at a couple of summary stats on the per-rep models:
+
+```{r,canWeFigureOutThresholdToTrust,cache=T,eval=T}
+g<- modelsToConsider %>% 
+  filter(BiologicalReplicate!="Pooled") %>%
+  group_by(Strain,Shifted) %>%
+  filter(length(LogMiddle)>2)%>%
+  mutate(MeanMean=mean(LogMiddle,na.rm=T)) %>% 
+  mutate(DevFromMean=LogMiddle-MeanMean) %>% 
+  mutate(SDFromMean=sd(LogMiddle)) %>% 
+  mutate(likely=exp(logLikely)) %>% 
+  gather(Variable,Value,MeanMean,SSE,likely)%>%
+  ggplot()+ geom_point()+
+  facet_wrap(~Shifted+Variable,scales="free")
+g+aes(x=log(Value),y=DevFromMean)
+```
+
+Hrm. So more likelihood of fit gets more error, and there's the 
+broken stuck fits up there. Probably ones without a lot of 
+measurements. Same for things with really low SSE. 
+
+Let's try comparing the SD of the per-rep estimates to the fit to
+the pooled model.
+
+```{r,canWeFigureOutThresholdToTrustCompPooling,cache=T,eval=T}
+left_join(modelsToConsider %>% 
+    filter(BiologicalReplicate!="Pooled") %>%
+    group_by(Strain,Shifted) %>%
+    summarize(perRepEstimateSD=sd(LogMiddle))
+  ,modelsToConsider%>%
+    filter(BiologicalReplicate=="Pooled") %>%
+    dplyr::select(Strain,Shifted,SSE,logLikely,LogMiddle)
+  ,by=c("Strain","Shifted")
+  )%>%
+  gather(Variable,Value,SSE,logLikely,LogMiddle)%>%
+  ggplot()+facet_wrap(~Shifted+Variable,scales="free")+
+  aes(x=Value,y=perRepEstimateSD)+
+  geom_point()
+```
+
+Likelyhood and SSE don't look related here to this metric.
+For the shifted samples, higher mean LogMiddles look like they're
+more deviant on the per-rep basis, but it's not clear cut.
+But that's also what we expect for this moving-bins design.
+
+Hrm.
+
+So we'll gather the raw-er data, and see if things like
+observations per gate, or total counts, if these predict bad/stuck
+fits (here, stuck fits refer to fits that look like artifacts due
+to just fitting to one bin, or the like).
+
+```{r,cutoffOnMeasurements,cache=T,eval=T}
+pdat <- modelsToConsider %>% 
+  filter(BiologicalReplicate=="Pooled") %>%
+  left_join(
+    modelingdat%>%
+      filter(Metric=="RawCounts",FACSGate!="input")%>%
+      group_by(Strain,Shifted,FACSGate,BiologicalReplicate)%>%
+      summarize(TC=sum(Signal,na.rm=T)
+        ,NumMeasuresPerGatePerRep=sum(Signal>0,na.rm=T)
+        )%>%
+      group_by(Strain,Shifted,FACSGate)%>%
+      summarize(TC=sum(TC)
+        ,NumMeasuresPerGate=sum(NumMeasuresPerGatePerRep>0)
+        ,NumMeasuresPerGatePerRep=sum(NumMeasuresPerGatePerRep)
+        ) %>%
+      group_by(Strain,Shifted)%>%
+      summarize(TC=sum(TC)
+        ,NumMeasures=sum(NumMeasuresPerGate>0)
+        ,NumMeasuresPerGate=sum(NumMeasuresPerGate)
+        ,NumMeasuresPerGatePerRep=sum(NumMeasuresPerGatePerRep)
+        )
+    ,by=c("Strain","Shifted")
+    ) %>% 
+  mutate(logTC=log(TC))
+
+pdat%>%
+  gather(PredVariable,PredValue
+    ,logTC,NumMeasures,NumMeasuresPerGate,NumMeasuresPerGatePerRep)%>%
+  gather(RespVariable,RespValue,logLikely,SSE)%>%
+  ggplot()+
+  facet_grid(RespVariable+Shifted~PredVariable,scales="free")+
+  aes(x=PredValue,y=RespValue)+
+  geom_point()
+```
+
+Now we're getting somewhere. Since we normalized to just be 
+proportions, we expect the loglikelihoods to all be about the same.
+Stuff too high is artifactual stuck fits. Also SSE is the sum of
+squared errors of the fit from the data, so that oughta be low.
+
+We see that with low successful measures, these go up. So let's pick
+what to filter on.
+
+Let's go with that you need at least 3 measurements across everything
+(so at least 3 of 4 bins estimated for the modeling), and
+at least 6 measurements of these across the biological replicates.
+So worse case scenario, if you really don't have a measurement in a
+bin, then you've got to have at least two bio reps worth in the 3
+you do measure, or else it's just jackpotting for high log like.
+
+```{r,cutoffOnMeasurements2,cache=T,eval=T}
+pdat%>%
+  mutate(colorit=factor(NumMeasures>=3):factor(NumMeasuresPerGate>=6))%>%
+  arrange(-colorit)%>%
+  gather(PredVariable,PredValue
+    ,logTC,NumMeasures,NumMeasuresPerGate,NumMeasuresPerGatePerRep)%>%
+  gather(RespVariable,RespValue,logLikely,SSE)%>%
+  ggplot()+
+  facet_grid(RespVariable+Shifted~PredVariable,scales="free")+
+  aes(x=PredValue,y=RespValue,col=colorit)+
+  geom_point()
+```
+
+Yeah that looks good. We'd be keeping the purples there. Some 
+zingers, but mostly good.
+
+```{r,filtering,cache=T,eval=T}
+filteredFits <- pdat %>% 
+  filter(NumMeasures>=3,NumMeasuresPerGate>=6)%>%
+  dplyr::select(Strain,Shifted)%>%
+  left_join(
+    modelsToConsider%>%
+      filter(BiologicalReplicate=="Pooled")
+    ,by=c("Strain","Shifted")
+    )%>%arrange(Strain,Shifted)
+```
+
+```{r}
+save(filteredFits,file="../tmp/dme209_filteredFits.RData")
+```
+
+Gross defects might mean that we just have counts in the high bin.
+So let's just filter on the pre-shift means, then see what we see
+in the high.
+
+```{r}
+filteredFits <- pdat %>% 
+  filter(NumMeasures>=3,NumMeasuresPerGate>=6)%>%
+  dplyr::select(Strain,Shifted)%>%
+  left_join(
+    modelsToConsider%>%
+      filter(BiologicalReplicate=="Pooled")
+    ,by=c("Strain","Shifted")
+    )%>%arrange(Strain,Shifted)
+
+filteredFits%>%dplyr::select(Strain,Common,LogMiddle,Shifted)%>%
+  spread(Shifted,LogMiddle)%>% 
+  filter(!is.na(PreShift),is.na(Shifted))
+```
+
+And how does this look?
+
+```{r,summaryFiltereds,cache=T,eval=T}
+filteredFits %>% 
+  ggplot()+
+  facet_wrap(~Shifted,scales="free")+
+  aes(x=LogMiddle,y=SSE)+
+  geom_point()
+
+rankingList <- filteredFits %>% 
+  dplyr::select(Strain,Common,Shifted,LogMiddle) %>%
+  spread(Shifted,LogMiddle) %>%
+  mutate(Diff=Shifted-PreShift) 
+```
+
+In that last line, I subtracted the PreShift log mean from the 
+Shifted log mean. That oughta be roughly linear with degradation
+rate. Maybe we can use that to look for slow repressing mutants?
+
+```{r,slowDiff,cache=T}
+rankingList %>% arrange(-Diff)
+```
+
+The problem is that we just pick up things that were repressed 
+before the shift, or are being predicted to be induced by the shift.
+
+The reason we don't just use the Shifted mean is because we'd expect
+things with a high PreShift mean to have a high Shifted mean just
+becuase they started with more. Is that so?
+
+```{r,preAndPostShiftMean,cache=T}
+g <- rankingList %>% 
+  ggplot()+
+  geom_point()
+g+aes(x=PreShift,y=Shifted)+
+  scale_y_continuous(limits=range(
+      rankingList[!is.na(rankingList$PreShift),"Shifted"]
+    ,na.rm=T
+    )
+  )
+g+aes(x=PreShift,y=Shifted)+
+  scale_y_continuous(limits=c(7,7.75))
+```
+
+Not really. What if we model a relationship? And also threshold
+on higher preshift means, so things that are definitely induced?
+
+Our threshold will be the mean of HIS3 minus one standard deviation
+(between replicates).
+
+```{r,tryingToUntangleTheTwoIeSteadyStateEffects,cache=T}
+rankingList$PreShift %>% summary()
+rankingList$Shifted %>% summary()
+
+modelsToConsider%>%
+  filter(BiologicalReplicate!="Pooled",Strain=="YOR202W")%>%
+  group_by(Shifted)%>%
+  summarize(his3Mean=mean(LogMiddle),his3SD=sd(LogMiddle))%>%
+  mutate(OneSDDown=his3Mean-his3SD)
+
+lmSfromP <- rankingList %>% 
+  filter(PreShift>8.125) %>%
+  lm(data=.,formula=Shifted~PreShift)
+
+rankingList <- rankingList %>% 
+  mutate(Resids=Shifted-(coef(lmSfromP)[1]+PreShift*coef(lmSfromP)[2]))
+
+g <- rankingList %>% 
+  ggplot()+theme_bw()+
+  geom_point(alpha=0.5,size=0.5)+
+  aes(x=PreShift,y=Shifted)+
+  scale_y_continuous(limits=range(
+      rankingList[!is.na(rankingList$PreShift),"Shifted"]
+    ,na.rm=T
+    )
+  )
+g+stat_smooth(data=rankingList%>%filter(PreShift>8.125),method="lm")
+
+g <- rankingList %>% ggplot()+theme_bw()+
+  geom_histogram(bins=100)+
+  aes(x=PreShift)#,y=Shifted)
+g
+
+g <- rankingList %>% ggplot()+theme_bw()+
+  geom_histogram(bins=100)+
+  aes(x=Shifted)+geom_vline(xintercept=7.65)
+g
+
+# refactoring
+ylimz <- range(rankingList%>%filter(!is.na(PreShift))%>%pull(Shifted),na.rm=T)
+xlimz <- range(rankingList%>%filter(!is.na(Shifted))%>%pull(PreShift),na.rm=T)
+tmpplotdat <- rankingList
+fig_scatter <- ggplot(rankingList)+theme_classic()+
+  aes(x=PreShift,y=Shifted)+
+  geom_point(size=0.5,alpha=0.5)+
+  xlab("ln(Pre-upshift expression) mean")+
+  ylab("ln(Post-upshift expression) mean")+
+  scale_y_continuous(limits=ylimz)+
+  scale_x_continuous(limits=xlimz)+
+  stat_smooth(data=rankingList%>%filter(PreShift>8.125),method="lm",col="red")
+fig_tophist <- ggplot(rankingList)+
+  aes(x=PreShift)+
+  theme_classic()+theme(axis.text.x=element_blank() #,axis.ticks.x=element_blank()
+    ,axis.title.x=element_blank())+xlab(NULL)+
+  geom_histogram(binwidth=0.05)+ylab("Counts")+
+  geom_vline(xintercept=8.125,col="red")+
+  scale_x_continuous(limits=xlimz)
+fig_righthist <- ggplot(rankingList)+
+  aes(x=Shifted)+
+  theme_classic()+theme(axis.text.y=element_blank() #,axis.ticks.x=element_blank()
+   # ,axis.title.x=element_blank()
+    )+xlab(NULL)+
+  geom_histogram(binwidth=0.05)+ylab("Counts")+
+  scale_x_continuous(limits=ylimz)+
+  coord_flip()
+fig_scatter <- fig_scatter+theme(plot.margin=unit(c(0,0,1,1.0),"cm"))
+fig_tophist <- fig_tophist+theme(plot.margin=unit(c(0.5,0,0,0),"cm"))
+fig_righthist <- fig_righthist+theme(plot.margin=unit(c(0,0.5,0,0),"cm"))
+a <- cowplot::plot_grid(
+  NULL,NULL
+  ,fig_scatter,fig_righthist
+  ,axis="b",align="h"
+  ,rel_widths=c(0.8,.3),rel_heights=c(1.5,5,5),ncol=2)
+b <- cowplot::plot_grid(
+  fig_tophist,NULL
+  ,fig_scatter,NULL
+  ,axis="l",align="v"
+  ,rel_widths=c(0.8,.3),rel_heights=c(1.5,5,5),ncol=2)
+fig2bc <- cowplot::ggdraw(a)+cowplot::draw_plot(b)
+fig2bc
+```
+
+```{r}
+ggsave("../output/Figure4_S_PreShiftPredictingPostShiftLM.un.tiff"
+  ,fig2bc,width=4,height=4)
+```
+
+Okay, so we have two ways to sort this list based on differences.
+We take 1 SD below the mean of HIS3 to be the threshold for 
+induction, and we can either sort by the lowest difference in
+means above this, or we can use that to fit a model and look
+for things that are way above this model of what we'd predict by
+the fit relationship of pre and post mean.
+
+```{r}
+rankingList%>%filter(PreShift>8.125)%>%arrange(-Diff)
+rankingList%>%arrange(-Resids)
+```
+
+Hey, how does that overlap with the mRNA RNP list from the Mitchell
+2013 paper?
+
+```{r}
+mitchellProtList <- read_csv("../data/mitchell2013suppTable1.csv")%>%
+  pull(`Systematic Name`)
+
+rankingList%>%mutate(mRNP=Strain%in%mitchellProtList)%>%
+  arrange(-mRNP)%>%data.frame%>%head(50)
+```
+
+Not really. Which is suprising, because they don't detect the Lsms
+as interacting with mRNA. Which is suprising...
+
+#fix the below for the supplement
+
+```{r,plotcomps,cache=T,eval=F}
+vandersluisGR <- read_tsv("../data/vandersluis2014add3.tsv",col_names=T)
+
+left_join(rankingList,vandersluisGR%>%mutate(Strain=Orf),by="Strain")%>%
+  gather(Variable,Value,PreShift,Shifted,Diff,Resids)%>%
+  ggplot()+aes(x=`glucose proline`,y=Value)+geom_point(alpha=0.5,sirankingListe=0.5)+
+  facet_wrap(~Variable,scales="free")+
+  xlab("Vandersluis2014 rankingList-score from wt growth, glucose+proline")
+
+left_join(rankingList,vandersluisGR%>%mutate(Strain=Orf),by="Strain")%>%
+  gather(Variable,Value,PreShift,Shifted,Diff,Resids)%>%
+  ggplot()+aes(x=`galactose proline`,y=Value)+geom_point(alpha=0.5,sirankingListe=0.5)+
+  facet_wrap(~Variable,scales="free")+
+  xlab("Vandersluis2014 rankingList-score from wt growth, galactose+proline")
+
+left_join(rankingList,vandersluisGR%>%mutate(Strain=Orf),by="Strain")%>%
+  gather(Variable,Value,PreShift,Shifted,Diff,Resids)%>%
+  ggplot()+aes(x=`galactose glutamine`,y=Value)+geom_point(alpha=0.5,sirankingListe=0.5)+
+  facet_wrap(~Variable,scales="free")+
+  xlab("Vandersluis2014 rankingList-score from wt growth, galactose+glutamine")
+
+left_join(rankingList,vandersluisGR%>%mutate(Strain=Orf),by="Strain")%>%
+  gather(Variable,Value,PreShift,Shifted,Diff,Resids)%>%
+  ggplot()+aes(x=`glucose glutamine`,y=Value)+geom_point(alpha=0.5,sirankingListe=0.5)+
+  facet_wrap(~Variable,scales="free")+
+  xlab("Vandersluis2014 z-score from wt growth, glucose+glutamine")
+```
+
+Next, we're just adding some labels here. First is `RBP`, and is
+membership as a known RNA binding protein by the CISP-BP database
+from Toronto. The next is membership in the list of proteins with
+phosphosites identified in Oliveria 2015 Table S9, so phosphosites
+that change in response to environmental changes and correlate with
+expected TORC1 activity.
+
+```{r,labelList,cache=T}
+oliveria <- read_csv("../data/oliveria2015sciSigSuppS9.csv")
+cispbp <- read_csv("../data/cispbpRNAyeast171110.csv")
+
+rankingList <- rankingList%>%
+  mutate(
+    RBP=ifelse(Strain%in%(cispbp%>%pull(GeneID)),T,F)
+    ,Oliveria=ifelse(Strain%in%(oliveria%>%pull(YORF)),T,F))
+```
+
+Based on this, MAF1 and DBF2 are phosphorylated, and might be 
+involved?
+
+```{r,writeAndSave}
+save(rankingList,file="../tmp/dme209_rankingList.RData")
+
+write_lines("#
+# Supplementary Table
+#
+# Final BFF models fit to the data pooled across replicates and
+# filtered for sufficent observations per bin and bins per strain,
+# ie filtering out the low-confidence fits.
+# 
+# Key:
+# systematic name of gene knocked out , common name of gene knocked out , natural log of mean signal pre-shift , natural log of mean signal post-shift , difference between the means (post - pre) , residual of post-shift mean against the prediction from the pre-shift mean"
+  ,path="../output/Figure4_Table_BFFfilteredPooledModels.csv")
+rankingList%>%
+  dplyr::select(Strain,Common,PreShift,Shifted,Diff,Resids,Oliveria)%>%
+  dplyr::rename(Strain=Strain,Common=Common
+    ,PreShiftMean=PreShift 
+    ,PostShiftMean=Shifted
+    ,DifferenceInMeans=Diff
+    ,IsPhosphorlyatedCorrelatedWithTORC1Oliveria2015=Oliveria
+    ,ResidualOfPostPredictedByPre=Resids)%>%
+  arrange(-ResidualOfPostPredictedByPre) %>%
+  write_csv(path="../output/Figure4_Table_BFFfilteredPooledModels.csv"
+    ,append=T)
+
+rankingList%>%pull(Strain)%>%unique%>%length
+
+```
+
+So how does functional enrichment look? GO, KEGG, that kind of thing.
+
+```{r,clusterProfilerSetup,cache=T}
+library(clusterProfiler)
+library(org.Sc.sgd.db)
+
+read_tsv("../data/sgd_go_full_171013.txt",col_names=F
+  ,comment="!") -> SGDGOFull
+
+read_tsv("../data/sgd_go_terms_171013.txt",col_names=F
+  ,comment="!") %>%
+  mutate(GOID=str_c("GO:"
+    ,str_pad(string=X1,width=7,side="left",pad="0"))
+    ) -> SGDGOTerms
+
+sysToSGD <- function(x) renameSystematicToSGDID[x]
+sgdToCommon <- function(x) renameSystematicToCommon[
+  names(renameSystematicToSGDID[which(renameSystematicToSGDID==x)])]
+rankingList <- rankingList %>% 
+  mutate(SGD=unlist(map(Strain,sysToSGD)))
+
+nPermutations <- 1e7
+```
+
+```{r,lookForBefore,dependson="clusterProfilerSetup",cache=T}
+HighGAP1BeforeShift_Input <- rankingList %>% 
+  mutate(SortMetric=PreShift)%>%
+  arrange(-SortMetric) %>% filter(!is.na(SortMetric)) %>%
+  {setNames(.$SortMetric,nm=.$SGD)} 
+HighGAP1BeforeShift_Results <- list()
+
+system.time(
+HighGAP1BeforeShift_Results[["BP"]] <- GSEA(
+  gene=HighGAP1BeforeShift_Input
+  ,TERM2GENE=SGDGOFull%>%filter(X9=="P")%>%dplyr::select(X5,X2)
+  ,TERM2NAME=SGDGOTerms%>%dplyr::select(GOID,X2)
+  ,minGSSize=2,maxGSSize=50
+  ,pAdjustMethod="fdr"
+  ,pvalueCutoff=0.2,seed=171013
+  ,nPerm=nPermutations
+  )
+)
+system.time(
+HighGAP1BeforeShift_Results[["CC"]] <- GSEA(
+  gene=HighGAP1BeforeShift_Input
+  ,TERM2GENE=SGDGOFull%>%filter(X9=="C")%>%dplyr::select(X5,X2)
+  ,TERM2NAME=SGDGOTerms%>%dplyr::select(GOID,X2)
+  ,minGSSize=2,maxGSSize=50
+  ,pAdjustMethod="fdr"
+  ,pvalueCutoff=0.2,seed=171013
+  ,nPerm=nPermutations
+  )
+)
+
+system.time(
+HighGAP1BeforeShift_Results[["MF"]] <- GSEA(
+  gene=HighGAP1BeforeShift_Input
+  ,TERM2GENE=SGDGOFull%>%filter(X9=="F")%>%dplyr::select(X5,X2)
+  ,TERM2NAME=SGDGOTerms%>%dplyr::select(GOID,X2)
+  ,minGSSize=2,maxGSSize=50
+  ,pAdjustMethod="fdr"
+  ,pvalueCutoff=0.2,seed=171013
+  ,nPerm=nPermutations
+  )
+)
+```
+
+```{r,lookForAfter,dependson="clusterProfilerSetup",cache=T}
+HighGAP1AfterShift_Input <- rankingList %>% 
+  mutate(SortMetric=Shifted)%>%
+  arrange(-SortMetric) %>% filter(!is.na(SortMetric)) %>%
+  {setNames(.$SortMetric,nm=.$SGD)} 
+HighGAP1AfterShift_Results <- list()
+
+system.time(
+HighGAP1AfterShift_Results[["BP"]] <- GSEA(
+  gene=HighGAP1AfterShift_Input
+  ,TERM2GENE=SGDGOFull%>%filter(X9=="P")%>%dplyr::select(X5,X2)
+  ,TERM2NAME=SGDGOTerms%>%dplyr::select(GOID,X2)
+  ,minGSSize=2,maxGSSize=50
+  ,pAdjustMethod="fdr"
+  ,pvalueCutoff=0.2,seed=171013
+  ,nPerm=nPermutations
+  )
+)
+
+system.time(
+HighGAP1AfterShift_Results[["CC"]] <- GSEA(
+  gene=HighGAP1AfterShift_Input
+  ,TERM2GENE=SGDGOFull%>%filter(X9=="C")%>%dplyr::select(X5,X2)
+  ,TERM2NAME=SGDGOTerms%>%dplyr::select(GOID,X2)
+  ,minGSSize=2,maxGSSize=50
+  ,pAdjustMethod="fdr"
+  ,pvalueCutoff=0.2,seed=171013
+  ,nPerm=nPermutations
+  )
+)
+
+system.time(
+HighGAP1AfterShift_Results[["MF"]] <- GSEA(
+  gene=HighGAP1AfterShift_Input
+  ,TERM2GENE=SGDGOFull%>%filter(X9=="F")%>%dplyr::select(X5,X2)
+  ,TERM2NAME=SGDGOTerms%>%dplyr::select(GOID,X2)
+  ,minGSSize=2,maxGSSize=50
+  ,pAdjustMethod="fdr"
+  ,pvalueCutoff=0.2,seed=171013
+  ,nPerm=nPermutations
+  )
+)
+```
+
+```{r,lookForResiduals,dependson="clusterProfilerSetup",cache=T}
+HighGAP1Residuals_Input <- rankingList %>% 
+  mutate(SortMetric=Resids)%>%
+  arrange(-SortMetric) %>% filter(!is.na(SortMetric)) %>%
+  {setNames(.$SortMetric,nm=.$SGD)} 
+HighGAP1Residuals_Results <- list()
+
+system.time(
+HighGAP1Residuals_Results[["BP"]] <- GSEA(
+  gene=HighGAP1Residuals_Input
+  ,TERM2GENE=SGDGOFull%>%filter(X9=="P")%>%dplyr::select(X5,X2)
+  ,TERM2NAME=SGDGOTerms%>%dplyr::select(GOID,X2)
+  ,minGSSize=2,maxGSSize=50
+  ,pAdjustMethod="fdr"
+  ,pvalueCutoff=0.2,seed=171013
+  ,nPerm=nPermutations
+  )
+)
+system.time(
+HighGAP1Residuals_Results[["CC"]] <- GSEA(
+  gene=HighGAP1Residuals_Input
+  ,TERM2GENE=SGDGOFull%>%filter(X9=="C")%>%dplyr::select(X5,X2)
+  ,TERM2NAME=SGDGOTerms%>%dplyr::select(GOID,X2)
+  ,minGSSize=2,maxGSSize=50
+  ,pAdjustMethod="fdr"
+  ,pvalueCutoff=0.2,seed=171013
+  ,nPerm=nPermutations
+  )
+)
+
+system.time(
+HighGAP1Residuals_Results[["MF"]] <- GSEA(
+  gene=HighGAP1Residuals_Input
+  ,TERM2GENE=SGDGOFull%>%filter(X9=="F")%>%dplyr::select(X5,X2)
+  ,TERM2NAME=SGDGOTerms%>%dplyr::select(GOID,X2)
+  ,minGSSize=2,maxGSSize=50
+  ,pAdjustMethod="fdr"
+  ,pvalueCutoff=0.2,seed=171013
+  ,nPerm=nPermutations
+  )
+)
+```
+
+Note we threshold on 8.125, that's 1 sd below the his3 mean.
+
+```{r,lookForDiff,dependson="clusterProfilerSetup",cache=T}
+HighGAP1Diff_Input <- rankingList %>% 
+  filter(PreShift>8.125)%>%
+  mutate(SortMetric=Diff)%>%
+  arrange(-SortMetric) %>% filter(!is.na(SortMetric)) %>%
+  {setNames(.$SortMetric,nm=.$SGD)} 
+HighGAP1Diff_Results <- list()
+
+system.time(
+HighGAP1Diff_Results[["BP"]] <- GSEA(
+  gene=HighGAP1Diff_Input
+  ,TERM2GENE=SGDGOFull%>%filter(X9=="P")%>%dplyr::select(X5,X2)
+  ,TERM2NAME=SGDGOTerms%>%dplyr::select(GOID,X2)
+  ,minGSSize=2,maxGSSize=50
+  ,pAdjustMethod="fdr"
+  ,pvalueCutoff=0.2,seed=171013
+  ,nPerm=nPermutations
+  )
+)
+system.time(
+HighGAP1Diff_Results[["CC"]] <- GSEA(
+  gene=HighGAP1Diff_Input
+  ,TERM2GENE=SGDGOFull%>%filter(X9=="C")%>%dplyr::select(X5,X2)
+  ,TERM2NAME=SGDGOTerms%>%dplyr::select(GOID,X2)
+  ,minGSSize=2,maxGSSize=50
+  ,pAdjustMethod="fdr"
+  ,pvalueCutoff=0.2,seed=171013
+  ,nPerm=nPermutations
+  )
+)
+
+system.time(
+HighGAP1Diff_Results[["MF"]] <- GSEA(
+  gene=HighGAP1Diff_Input
+  ,TERM2GENE=SGDGOFull%>%filter(X9=="F")%>%dplyr::select(X5,X2)
+  ,TERM2NAME=SGDGOTerms%>%dplyr::select(GOID,X2)
+  ,minGSSize=2,maxGSSize=50
+  ,pAdjustMethod="fdr"
+  ,pvalueCutoff=0.2,seed=171013
+  ,nPerm=nPermutations
+  )
+)
+```
+
+
+```{r,printit,cache=F}
+
+allResults <- tibble(
+  ID=NA
+  ,Description=NA
+  ,Score=NA
+  ,qvalues=NA
+  ,p.adjust=NA
+  ,setSize=NA
+  ,rank=NA
+  ,Common=NA
+  )
+
+cat("BeforeShift\n")
+thisOne <- HighGAP1BeforeShift_Results
+for (i in names(thisOne)) {
+  cat(str_c(i," ontology\n"))
+  if ( nrow(thisOne[[i]]@result) ) {
+    z <- thisOne[[i]]@result%>%
+      as_tibble%>%
+      mutate(SGDz=str_split(core_enrichment,"/"))%>%unnest%>%
+      mutate(Common=map(SGDz,sgdToCommon))%>%
+      dplyr::select(-core_enrichment,-SGDz)%>%
+      nest(Common,.key="Common")%>%rowwise()%>%
+      mutate(Common=str_c(unlist(Common),collapse=","))%>%
+      mutate(Comparison="Pre-shift")%>%
+      dplyr::rename(Score=enrichmentScore)%>%
+      dplyr::select(Comparison,ID,Description,Score,qvalues,setSize,rank,Common)
+    print(knitr::kable(z))
+    allResults <- bind_rows(allResults,z)
+  }
+}
+
+cat("AfterShift\n")
+thisOne <- HighGAP1AfterShift_Results
+for (i in names(thisOne)) {
+  cat(str_c(i," ontology\n"))
+  if ( nrow(thisOne[[i]]@result) ) {
+    z <- thisOne[[i]]@result%>%
+      as_tibble%>%
+      mutate(SGDz=str_split(core_enrichment,"/"))%>%unnest%>%
+      mutate(Common=map(SGDz,sgdToCommon))%>%
+      dplyr::select(-core_enrichment,-SGDz)%>%
+      nest(Common,.key="Common")%>%rowwise()%>%
+      mutate(Common=str_c(unlist(Common),collapse=","))%>%
+      mutate(Comparison="Post-shift")%>%
+      dplyr::rename(Score=enrichmentScore)%>%
+      dplyr::select(Comparison,ID,Description,Score,qvalues,setSize,rank,Common)
+    print(knitr::kable(z))
+    allResults <- bind_rows(allResults,z)
+  }
+}
+
+cat("DiffShift\n")
+thisOne <- HighGAP1Diff_Results
+for (i in names(thisOne)) {
+  cat(str_c(i," ontology\n"))
+  if ( nrow(thisOne[[i]]@result) ) {
+    z <- thisOne[[i]]@result%>%
+      as_tibble%>%
+      mutate(SGDz=str_split(core_enrichment,"/"))%>%unnest%>%
+      mutate(Common=map(SGDz,sgdToCommon))%>%
+      dplyr::select(-core_enrichment,-SGDz)%>%
+      nest(Common,.key="Common")%>%rowwise()%>%
+      mutate(Common=str_c(unlist(Common),collapse=","))%>%
+      mutate(Comparison="Difference between post and pre")%>%
+      dplyr::rename(Score=enrichmentScore)%>%
+      dplyr::select(Comparison,ID,Description,Score,qvalues,setSize,rank,Common)
+    print(knitr::kable(z))
+    allResults <- bind_rows(allResults,z)
+  }
+}
+
+cat("Residuals\n")
+thisOne <- HighGAP1Residuals_Results
+for (i in names(thisOne)) {
+  cat(str_c(i," ontology\n"))
+  if ( nrow(thisOne[[i]]@result) ) {
+    z <- thisOne[[i]]@result%>%
+      as_tibble%>%
+      mutate(SGDz=str_split(core_enrichment,"/"))%>%unnest%>%
+      mutate(Common=map(SGDz,sgdToCommon))%>%
+      dplyr::select(-core_enrichment,-SGDz)%>%
+      nest(Common,.key="Common")%>%rowwise()%>%
+      mutate(Common=str_c(unlist(Common),collapse=","))%>%
+      mutate(Comparison="Residuals from pre predicting post")%>%
+      dplyr::rename(Score=enrichmentScore)%>%
+      dplyr::select(Comparison,ID,Description,Score,qvalues,setSize,rank,Common)
+    print(knitr::kable(z))
+    allResults <- bind_rows(allResults,z)
+  }
+}
+
+```
+
+```{r,top20,cache=T}
+
+Top20EntrezIDs <- rankingList%>%filter(Shifted>7.635)%>%
+  mutate(SGD=renameSystematicToSGDID[Strain])%>%pull(SGD)%>%
+  bitr(.,fromType="SGD",toType="ENTREZID"
+    ,OrgDb=org.Sc.sgd.db,drop=T) %>%
+  pull(ENTREZID)
+
+BackgroundEntrezIDs <- rankingList%>%
+  mutate(SGD=renameSystematicToSGDID[Strain])%>%pull(SGD)%>%
+  bitr(.,fromType="SGD",toType="ENTREZID"
+    ,OrgDb=org.Sc.sgd.db,drop=T) %>%
+  pull(ENTREZID)
+
+CategoricalGO_MF <- enrichGO(gene=Top20EntrezIDs
+  ,universe=BackgroundEntrezIDs
+  ,OrgDb=org.Sc.sgd.db
+  ,ont="MF"#MF BP CC all
+  ,pAdjustMethod="fdr"
+  ,pvalueCutoff=0.01
+  ,qvalueCutoff=0.20
+  ,minGSSize=2,maxGSSize=200)@result
+
+CategoricalGO_BP <- enrichGO(gene=Top20EntrezIDs
+  ,universe=BackgroundEntrezIDs
+  ,OrgDb=org.Sc.sgd.db
+  ,ont="BP"#MF BP CC all
+  ,pAdjustMethod="fdr"
+  ,pvalueCutoff=0.01
+  ,qvalueCutoff=0.20
+  ,minGSSize=2,maxGSSize=200)@result
+
+CategoricalGO_CC <- enrichGO(gene=Top20EntrezIDs
+  ,universe=BackgroundEntrezIDs
+  ,OrgDb=org.Sc.sgd.db
+  ,ont="CC"#MF BP CC all
+  ,pAdjustMethod="fdr"
+  ,pvalueCutoff=0.01
+  ,qvalueCutoff=0.20
+  ,minGSSize=2,maxGSSize=200)@result
+
+```
+
+
+```{r,eval=F,include=F}
+# I had this setup to work, but then I realized it was all
+# computationally predicted from human data!
+#```{r,reactomeAnalysisSetup,cache=T,warning=F,message=F,error=F}
+#library(ReactomePA)
+#rankingListEntrez <- rankingList%>%filter(!is.na(SGD))%>%
+#  mutate(EntrezID=map(SGD,function(x){bitr(x,fromType="SGD",toType="ENTREZID"
+#      ,OrgDb=org.Sc.sgd.db)[,2]}
+#      )
+#    )
+#
+#nPermutations <- 1e7
+#```
+#
+#```{r,reactomeAnalysis1,cache=T,dependson="reactomeAnalysisSetup"}
+#pathway_highPreShift_input <- rankingListEntrez %>%
+#  mutate(Metric=PreShift)%>%
+#  filter(!is.na(EntrezID),EntrezID!=0,!is.na(Metric))%>%
+#  arrange(-Metric)%>%
+#  {setNames(.$Metric,nm=.$EntrezID)}
+#pathway_highPreShift_GSE <- gsePathway(geneList=pathway_highPreShift_input,organism="yeast"
+#  ,nPerm=nPermutations
+#  ,minGSSize=2,maxGSSize=200,pvalueCutoff=0.1)
+#if (nrow(pathway_highPreShift_GSE@result)==0) {
+#  pathway_highPreShift_result <- NA
+#} else {
+#  pathway_highPreShift_result <- pathway_highPreShift_GSE@result%>%
+#    mutate(entrez=str_split(core_enrichment,"/"))%>%unnest%>%
+#    mutate(SGD=map(entrez,function(x){
+#          bitr(x,fromType="ENTREZID",toType="SGD"
+#            ,OrgDb=org.Sc.sgd.db)[,2]
+#        })
+#      ) %>% mutate(Common=unlist(map(SGD,sgdToCommon)))%>%
+#    group_by(ID,Description,setSize,enrichmentScore,p.adjust,rank) %>%
+#    summarize(Common=str_c(Common,collapse=","))%>%
+#    dplyr::rename(Score=enrichmentScore)%>%
+#    dplyr::select(ID,Description,Score,qvalues,setSize,rank,Common)
+#}
+#```
+#
+#```{r,reactomeAnalysis2,cache=T,dependson="reactomeAnalysisSetup"}
+#pathway_highShift_input <- rankingListEntrez %>%
+#  mutate(Metric=Shifted)%>%
+#  filter(!is.na(EntrezID),EntrezID!=0,!is.na(Metric))%>%
+#  arrange(-Metric)%>%
+#  {setNames(.$Metric,nm=.$EntrezID)}
+#pathway_highShift_GSE <- gsePathway(geneList=pathway_highShift_input,organism="yeast"
+#  ,nPerm=nPermutations
+#  ,minGSSize=2,maxGSSize=200,pvalueCutoff=0.1)
+#if (nrow(pathway_highShift_GSE@result)==0) {
+#  pathway_highShift_result <- NA
+#} else {
+#  pathway_highShift_result <- pathway_highShift_GSE@result%>%
+#    mutate(entrez=str_split(core_enrichment,"/"))%>%unnest%>%
+#    mutate(SGD=map(entrez,function(x){
+#          bitr(x,fromType="ENTREZID",toType="SGD"
+#            ,OrgDb=org.Sc.sgd.db)[,2]
+#        })
+#      ) %>% mutate(Common=unlist(map(SGD,sgdToCommon)))%>%
+#    group_by(ID,Description,setSize,enrichmentScore,p.adjust,qvalues,rank) %>%
+#    summarize(Common=str_c(Common,collapse=","))%>%
+#    ungroup()%>%
+#    dplyr::rename(Score=enrichmentScore)%>%
+#    dplyr::select(ID,Description,Score,qvalues,setSize,rank,Common)
+#}
+#```
+#
+#```{r,reactomeAnalysis3,cache=T,dependson="reactomeAnalysisSetup"}
+#pathway_highResids_input <- rankingListEntrez %>%
+#  mutate(Metric=Resids)%>%
+#  filter(!is.na(EntrezID),EntrezID!=0,!is.na(Metric))%>%
+#  arrange(-Metric)%>%
+#  {setNames(.$Metric,nm=.$EntrezID)}
+#pathway_highResids_GSE <- gsePathway(geneList=pathway_highResids_input,organism="yeast"
+#  ,nPerm=nPermutations
+#  ,minGSSize=2,maxGSSize=200,pvalueCutoff=0.1)
+#if (nrow(pathway_highResids_GSE@result)==0) {
+#  pathway_highResids_result <- NA
+#} else {
+#  pathway_highResids_result <- pathway_highPreResids_GSE@result%>%
+#    mutate(entrez=str_split(core_enrichment,"/"))%>%unnest%>%
+#    mutate(SGD=map(entrez,function(x){
+#          bitr(x,fromType="ENTREZID",toType="SGD"
+#            ,OrgDb=org.Sc.sgd.db)[,2]
+#        })
+#      ) %>% mutate(Common=unlist(map(SGD,sgdToCommon)))%>%
+#    group_by(ID,Description,setSize,enrichmentScore,p.adjust,rank) %>%
+#    summarize(Common=str_c(Common,collapse=","))%>%
+#    dplyr::rename(Score=enrichmentScore)%>%
+#    dplyr::select(ID,Description,Score,qvalues,setSize,rank,Common)
+#}
+#```
+#
+#```{r,reactomeAnalysis4,cache=T,dependson="reactomeAnalysisSetup"}
+#pathway_highDiff_input <- rankingListEntrez %>%
+#  filter(PreShift>8.125)%>%
+#  mutate(Metric=Diff)%>%
+#  filter(!is.na(EntrezID),EntrezID!=0,!is.na(Metric))%>%
+#  arrange(-Metric)%>%
+#  {setNames(.$Metric,nm=.$EntrezID)}
+#pathway_highDiff_GSE <- gsePathway(geneList=pathway_highDiff_input,organism="yeast"
+#  ,nPerm=nPermutations
+#  ,minGSSize=2,maxGSSize=200,pvalueCutoff=0.1)
+#if (nrow(pathway_highDiff_GSE@result)==0) {
+#  pathway_highDiff_result <- NA
+#} else {
+#  pathway_highDiff_result <- pathway_highDiff_GSE@result%>%
+#    mutate(entrez=str_split(core_enrichment,"/"))%>%unnest%>%
+#    mutate(SGD=map(entrez,function(x){
+#          bitr(x,fromType="ENTREZID",toType="SGD"
+#            ,OrgDb=org.Sc.sgd.db)[,2]
+#        })
+#      ) %>% mutate(Common=unlist(map(SGD,sgdToCommon)))%>%
+#    group_by(ID,Description,setSize,enrichmentScore,p.adjust,rank) %>%
+#    summarize(Common=str_c(Common,collapse=","))%>%
+#    dplyr::rename(Score=enrichmentScore)%>%
+#    dplyr::select(ID,Description,Score,qvalues,setSize,rank,Common)
+#}
+#```
+#
+#```{r,reactomeViz,dependson="clusterProfilerSetup"}
+#library(clusterProfiler)
+#g <- gseaplot(pathway_highShift_GSE,"R-SCE-198753")
+#g
+#```
+
+```{r,allResultz,cache=T}
+allResults <- bind_rows(
+  allResults%>%mutate(Comparison=str_c("GO terms, ",Comparison))
+#  ,pathway_highPreShift_result%>%as_tibble%>%mutate(Comparison="Reactome, high pre-shift")
+#  ,pathway_highShift_result%>%as_tibble%>%mutate(Comparison="Reactome, high post-shift")
+#  ,pathway_highResids_result%>%as_tibble%>%mutate(Comparison="Reactome, residuals from pre predicting post")
+#  ,pathway_highDiff_result%>%as_tibble%>%mutate(Comparison="Reactome, difference between post and pre")
+  ) %>%
+  dplyr::select(
+    Comparison,ID,Description,Score,qvalues,setSize,rank,Common
+    )%>%
+  arrange(Comparison,qvalues)
+
+allResults%>%data.frame%>%head(1e4)
+```
+
+```{r}
+
+write_lines("#
+# Supplementary Table 
+# 
+# Gene set enrichment analysis of BFF modeled GAP1 means arranged by
+# several comparisons. Pre-shift or post-shift are before and after
+# glutamine addition. Difference refers to post-shift mean minus the
+# pre-shift mean. Residual refers to a residual to the model of
+# pre-shift mean predicted post-shift mean.
+#
+# Key:
+# which comparison is made , term ID , the term , score of enrichment , FDR adjusted p-value , size of the enriched set , rank of the set in the list , common names of genes in the set"
+  ,"../output/Figure4_Table_GSEanalysisOfBFFresults.csv")
+allResults %>% 
+  filter(!is.na(ID))%>%
+  write_csv("../output/Figure4_Table_GSEanalysisOfBFFresults.csv"
+    ,append=T)
+
+```
+
+These two plots are comparing the estimated rates of stability and
+changes with the estimated GAP1 mRNA abundances. This is inspired
+by the idea of RPS28B (or whatever) forming p-bodies due to 
+cis-elements in its sequence.
+
+```{r}
+resultTable%>%left_join(rankingList%>%mutate(Systematic=Strain)%>%
+  dplyr::select(-Common),by="Systematic")%>%
+  dplyr::select(BasalRate_Estimate,ChangeRate_Estimate,Called
+    ,PreShift,Shifted,Diff)%>%
+  arrange(desc(Called))%>%
+  gather(Variable,Value,PreShift,Shifted,Diff)%>%
+  ggplot()+aes(x=BasalRate_Estimate,y=Value,col=Called)+
+  facet_wrap(~Variable)+geom_point()
+
+resultTable%>%left_join(rankingList%>%mutate(Systematic=Strain)%>%
+  dplyr::select(-Common),by="Systematic")%>%
+  dplyr::select(BasalRate_Estimate,ChangeRate_Estimate,Called
+    ,PreShift,Shifted,Diff)%>%
+  arrange(desc(Called))%>%
+  gather(Variable,Value,PreShift,Shifted,Diff)%>%
+  ggplot()+aes(x=ChangeRate_Estimate,y=Value,col=Called)+
+  facet_wrap(~Variable,scales="free")+geom_point()
+
+resultTable%>%left_join(rankingList%>%mutate(Systematic=Strain)%>%
+  dplyr::select(-Common),by="Systematic")%>%
+  dplyr::select(BasalRate_Estimate,ChangeRate_Estimate,Called
+    ,PreShift,Shifted,Diff)%>%
+  filter(!is.na(Shifted))%>%
+  arrange(Called,-Shifted)
+
+resultTable%>%left_join(rankingList%>%mutate(Systematic=Strain)%>%
+  dplyr::select(-Common),by="Systematic")%>%
+  dplyr::select(BasalRate_Estimate,ChangeRate_Estimate,Called
+    ,PreShift,Shifted,Diff)%>%
+  filter(!is.na(Shifted))%>%
+  arrange(Called,Shifted)
+
+```
+
+
+```{r,deCalling,cache=T,eval=T}
+library(qvalue)
+
+modz <- modelsToConsider %>% 
+  filter(BiologicalReplicate!="Pooled") %>%
+  group_by(Strain,Shifted)%>%nest(LogMiddle)
+
+testy <- left_join(modz,modz%>%filter(Strain=="YOR202W")%>%
+    transmute(Shifted=Shifted,His3data=data)
+  ,by=c("Shifted"))%>%
+  group_by(Strain,Shifted) %>%
+  filter(length(unlist(data))>1) %>%
+  mutate(Tstatistic=list(t.test(x=unlist(data),y=unlist(His3data))))%>%
+  mutate(Statistic=map(Tstatistic,function(x){x$statistic}))%>%
+  mutate(PValue=map(Tstatistic,function(x){x$p.value}))%>%
+  unnest(Statistic,PValue) %>%
+  arrange(-Statistic)
+testy$QValue <- testy%>%pull(PValue)%>%qvalue()%>%{.[["qvalues"]]}
+
+write_csv(testy%>%
+    dplyr::select(Strain,Shifted,Statistic,PValue,QValue)
+  ,path="../tmp/dme209ttesting.csv")
+
+sgd_gff <- read_delim("../data/sgd_171019.gff","\t"
+    ,comment="#",col_names=F)%>%
+  mutate(SGD=str_extract(X9,"SGD:[^;]+"))%>%
+  mutate(SGD=str_replace(SGD,"SGD:",""))%>%
+  mutate(Name=str_match(X9,"Name=([^;]+);")[,2])
+
+testyFDR02 <-testy%>%filter(QValue < 0.2)%>%
+  left_join(sgd_gff%>%dplyr::select(Name,SGD)%>%
+      dplyr::rename(Strain=Name)
+    ,by="Strain") %>%
+  mutate(ENTREZID=map(SGD,function(x) 
+      try(bitr(x,fromType="SGD",toType="ENTREZID",OrgDb=org.Sc.sgd.db,drop=T))
+    ))%>%
+  dplyr::select(-data,-His3data,-Tstatistic)%>%
+  rowwise()%>%
+  mutate(Commons=map(Strain,function(x) renameSystematicToCommon[unlist(x)] )[[1]]) %>%
+  group_by(Statistic>0,Shifted) %>%
+  nest(ENTREZID,.key="entz")
+background <- unlist(testyFDR02$entz)
+
+Enricher <- crossing(testyFDR02,Ontz=c("MF","BP","CC")) %>% rowwise %>% mutate(
+    GOobject=pmap(list(entz,Ontz),function(entz,Ontz){ 
+      enrichGO(gene=unlist(entz),universe=background
+        ,OrgDb=org.Sc.sgd.db,ont=Ontz,pAdjustMethod="fdr"
+        ,pvalueCutoff=0.2
+        ,qvalueCutoff=0.2,minGSSize=2,maxGSSize=500)@result}
+      )
+    )
+```
+
+
+```{r,printResults,cache=T}
+
+z <- Enricher%>%ungroup%>%filter(map(.$GOobject,~nrow(.x))>0)%>%
+  unnest(GOobject)%>%
+  dplyr::select(`Statistic > 0`,Shifted,qvalue,geneID,Description)%>%
+  rowwise%>%
+  mutate(gene_list=list(str_split(geneID,"/")))%>%
+  rowwise%>%
+  mutate(SGD_list=list(bitr(unlist(gene_list)
+                            ,fromType="ENTREZID",toType="SGD"
+                            ,OrgDb=org.Sc.sgd.db,drop=T)))%>%
+  unnest(SGD_list) %>%
+  rowwise%>% left_join(
+    sgd_gff%>%dplyr::select(Name,SGD)%>%
+      dplyr::rename(Strain=Name)
+    ,by="SGD") %>%
+  rowwise()%>%
+  mutate(Common=unlist(map(Strain,~renameSystematicToCommon[.x])))%>%
+  dplyr::select(`Statistic > 0`,Shifted,qvalue,Common,Strain,Description)%>%
+  arrange(qvalue)%>%
+  {as.data.frame(.)}
+
+```
+
+<!--
+
+# For the below, I'm trying to develop some statistic of a log
+# likelihood ratio but I'm stumped. 
+
+# maybe try evaluating each bio rep for likelihood
+# given pooled or his3pooled parameters, look at distribution of 
+# ratios?
+
+Here we ask how likely the pooled data is, given the parameters from
+fitting to just the his3KO (wt) strain.
+
+```{r,logLikItOrNot,cache=T,eval=F}
+pintervalNormal <- function(gate,bounds,fitparm1,fitparm2) {
+  return(
+    pnorm(log(bounds[["UpperBound"]])
+      ,mean=fitparm1,sd=fitparm2
+      ) 
+    -
+    pnorm(log(bounds[["LowerBound"]])
+      ,mean=fitparm1,sd=fitparm2
+      ) 
+    )
+}
+
+estimateLogLikelihoodAgainstHis3 <- function(thisDatar
+                                      ,ShiftedOrNot
+                                      ,his3parms
+                                      ) {
+  pintervalModel <- pintervalNormal
+# This is to set any missing observations as 0
+  missingValues <- as.character(base::setdiff(c(1,2,3,4),names(thisDatar)))
+  for (i in missingValues) thisDatar[[i]] <- 0
+# We select the proper bounds from our list
+  bounds <- boundslist[[ShiftedOrNot]]
+# and define a fit function  that returns the loglikelihood
+  fitfunc <- function(fitparm1,fitparm2) {
+    pz <- c(pintervalModel(1,bounds[[1]],fitparm1,fitparm2)
+      ,pintervalModel(2,bounds[[2]],fitparm1,fitparm2)
+      ,pintervalModel(3,bounds[[3]],fitparm1,fitparm2)
+      ,pintervalModel(4,bounds[[4]],fitparm1,fitparm2)
+      )
+    ll <- c(thisDatar[["1"]]*log(pz[1]),thisDatar[["2"]]*log(pz[2])
+      ,thisDatar[["3"]]*log(pz[3]),thisDatar[["4"]]*log(pz[4])
+      )
+    ll[!is.finite(ll)] <- -36
+    return(-sum(ll,na.rm=T))
+  }
+  return(-fitfunc(his3parms[[ShiftedOrNot]][["LogMean"]]
+      ,his3parms[[ShiftedOrNot]][["LogSD"]]))
+# debugging
+#return(c(fitfunc(7,0.5),fitfunc(7.5,0.5),fitfunc(8,.5)))
+}
+
+his3mods <- modelsToConsider%>%
+  filter(BiologicalReplicate=="Pooled",Strain=="YOR202W")%>%
+  group_by(Shifted)%>%
+  summarize(list(c(LogMean=LogMiddle,LogSD=LogSpread))) 
+his3list <- setNames(his3mods[[2]],nm=his3mods[[1]])
+
+system.time(
+logLikeToHis3 <- sortdat %>% 
+#filter(Strain%in%unique(sortdat$Strain)[1:100])%>% #for debugging
+  filter(Metric=="EstInput")%>%
+#  mutate(BiologicalReplicate="Pooled") %>%
+  group_by(Metric,Strain,Common,Shifted,GateIndex,BiologicalReplicate) %>%
+  summarize(SumMeanPsuedoEvents=sum(MeanPsuedoEvents,na.rm=T)) %>% 
+  group_by(Metric,Strain,Common,Shifted,BiologicalReplicate) %>%
+  mutate(PropInEachBin=SumMeanPsuedoEvents/sum(SumMeanPsuedoEvents,na.rm=T)) %>%
+  group_by(Metric,Strain,Common,Shifted,BiologicalReplicate) %>%
+  summarize(PropsList=list(setNames(PropInEachBin,nm=GateIndex))) %>%
+  left_join(
+    modelsToConsider%>%select(Strain,Shifted,BiologicalReplicate,LogMiddle)
+    ,by=c("Strain","Shifted","BiologicalReplicate")
+    ) %>% 
+  mutate(Sign=sign(LogMiddle-his3list[Shifted][[1]][["LogMean"]])) %>%
+  mutate(
+    logLikeAgainstHis3Model=unlist(map2(PropsList,Shifted
+        ,.f=estimateLogLikelihoodAgainstHis3 
+        ,his3parms=his3list
+        )
+      )
+    ) 
+  )
+
+fitAndHis3 <- filteredFits %>%
+  left_join(
+    logLikeToHis3 %>% ungroup()%>%
+      select(Strain,Common,Shifted,logLikeAgainstHis3Model,Sign)
+    ,by=c("Strain","Common","Shifted")
+    ) %>% 
+  mutate(Ratio=exp(logLikely)/exp(logLikeAgainstHis3Model)) %>%
+  arrange(Strain,Shifted)
+
+quantz <- fitAndHis3 %>% group_by(Shifted) %>% 
+  summarize(list(quantile(Ratio,probs=c(0.025,0.975))))
+quantz[[2]]
+
+quantz <- fitAndHis3 %>% group_by(Shifted) %>% 
+  summarize(list(quantile(log(Ratio),probs=c(0.025,0.975))))
+quantz[[2]]
+
+fitAndHis3 %>% ggplot()+
+  facet_wrap(~Shifted,scales="free")+
+  aes(x=Ratio)+geom_histogram(bins=100)
+
+fitAndHis3 %>% ggplot()+
+  facet_wrap(~Shifted,scales="free")+
+  aes(x=log(Ratio))+geom_histogram(bins=100)
+
+fitAndHis3 %>% ggplot()+
+  facet_wrap(~Shifted,scales="free")+
+  aes(x=log(Ratio),y=SSE)+geom_point()
+```
+
+Okay, so what if we just compare each rep against it's pooled fit?
+This is to make a null distribution.
+
+```{r,ratioLogLikeAgainstSelf,cache=T,eval=F}
+estimateLogLikelihoodAgainstSelf <- function(thisDatar
+                                      ,ShiftedOrNot
+                                      ,selfParms
+                                      ) {
+  pintervalModel <- pintervalNormal
+# This is to set any missing observations as 0
+  missingValues <- as.character(base::setdiff(c(1,2,3,4),names(thisDatar)))
+  for (i in missingValues) thisDatar[[i]] <- 0
+# We select the proper bounds from our list
+  bounds <- boundslist[[ShiftedOrNot]]
+# and define a fit function  that returns the loglikelihood
+  fitfunc <- function(fitparm1,fitparm2) {
+    pz <- c(pintervalModel(1,bounds[[1]],fitparm1,fitparm2)
+      ,pintervalModel(2,bounds[[2]],fitparm1,fitparm2)
+      ,pintervalModel(3,bounds[[3]],fitparm1,fitparm2)
+      ,pintervalModel(4,bounds[[4]],fitparm1,fitparm2)
+      )
+    ll <- c(thisDatar[["1"]]*log(pz[1]),thisDatar[["2"]]*log(pz[2])
+      ,thisDatar[["3"]]*log(pz[3]),thisDatar[["4"]]*log(pz[4])
+      )
+    ll[!is.finite(ll)] <- -36
+    return(-sum(ll,na.rm=T))
+  }
+  return(-fitfunc(selfParms[["LogMean"]]
+      ,selfParms[["LogSD"]]))
+# debugging
+#return(c(fitfunc(7,0.5),fitfunc(7.5,0.5),fitfunc(8,.5)))
+}
+
+system.time(
+logLikeToSelf <- sortdat %>% 
+#filter(Strain%in%unique(sortdat$Strain)[1:100])%>% #for debugging
+  filter(Metric=="EstInput")%>%
+  group_by(Metric,Strain,Common,Shifted,GateIndex,BiologicalReplicate) %>%
+  summarize(SumMeanPsuedoEvents=sum(MeanPsuedoEvents,na.rm=T)) %>% 
+  group_by(Metric,Strain,Common,Shifted,BiologicalReplicate) %>%
+  mutate(PropInEachBin=SumMeanPsuedoEvents/sum(SumMeanPsuedoEvents,na.rm=T)) %>%
+  group_by(Metric,Strain,Common,Shifted,BiologicalReplicate) %>%
+  summarize(PropsList=list(setNames(PropInEachBin,nm=GateIndex))) %>% 
+  left_join(
+    modelsToConsider%>%
+      filter(BiologicalReplicate!="Pooled")%>%
+      select(Strain,Shifted,BiologicalReplicate,LogMiddle)
+    ,by=c("Strain","Shifted","BiologicalReplicate")
+    ) %>%
+  left_join(
+    modelsToConsider%>%
+      filter(BiologicalReplicate=="Pooled")%>%
+      select(-BiologicalReplicate,-Common)%>%
+      group_by(Strain,Shifted,logLikely)%>%
+      summarize(PooledParms=list(c(LogMean=LogMiddle,LogSD=LogSpread)))
+    ,by=c("Strain","Shifted")
+    ) %>% 
+  rowwise()%>%
+  mutate(Sign=sign(LogMiddle-PooledParms[["LogMean"]]))%>%
+  ungroup() %>%
+  mutate(
+    logLikeAgainstSelfModel=unlist(pmap(
+        .l=list(PropsList,Shifted,PooledParms)
+        ,.f=estimateLogLikelihoodAgainstSelf 
+        )
+      )
+    ) 
+  )
+
+fitAndSelf <- filteredFits%>%select(Strain)%>%distinct()%>%
+  left_join(
+    modelsToConsider%>%
+      select(Strain,Common,Shifted,BiologicalReplicate,logLikely,LogMiddle)
+    ,by="Strain")%>%
+  filter(BiologicalReplicate!="Pooled") %>%
+  left_join(
+    logLikeToSelf %>% ungroup()%>%
+      select(Strain,Common,Shifted,BiologicalReplicate,logLikeAgainstSelfModel,Sign)
+    ,by=c("Strain","Common","Shifted","BiologicalReplicate")
+    ) %>% 
+  mutate(NullRatio=exp(logLikely)/exp(logLikeAgainstSelfModel)) %>%
+  arrange(Strain,Shifted)
+
+fitAndSelf %>% ggplot()+
+  facet_wrap(~Shifted,scales="free")+
+  aes(x=NullRatio)+geom_histogram(bins=100)
+
+fitAndSelf %>% ggplot()+
+  facet_wrap(~Shifted,scales="free")+
+  aes(x=log(NullRatio))+geom_histogram(bins=100)
+
+quantz <- fitAndSelf %>% group_by(Shifted) %>% 
+  summarize(Quants=list(quantile(NullRatio,probs=c(0.025,0.975))))
+quantz[[2]]
+
+quantz <- fitAndSelf %>% group_by(Shifted) %>% 
+  summarize(Quants=list(quantile(log(NullRatio),probs=c(0.025,0.975))))
+quantz[[2]]
+
+fitAndSelf %>% group_by(Shifted) %>% 
+  summarize(list(qqnorm(NullRatio)))
+
+fitAndSelf %>% group_by(Shifted) %>% 
+  summarize(list(qqnorm(log(NullRatio))))
+
+
+
+fitAndSelf %>% group_by(Shifted) %>% 
+  summarize(list(shapiro.test((sample(NullRatio,5000)))))%>%pull
+
+fitAndSelf %>% 
+  ggplot()+aes(x=LogMiddle,y=NullRatio)+geom_point()+scale_y_log10()+facet_wrap(~Shifted)
+
+fitAndHis3 %>% 
+  ggplot()+aes(x=LogMiddle,y=Ratio)+geom_point()+scale_y_log10(breaks=seq(1,2,0.1))+facet_wrap(~Shifted)
+
+z <- fitAndHis3 %>% group_by(Shifted) %>% 
+  left_join(quantz,by="Shifted") %>%
+  filter(Ratio>Quants[[1]][2])
+
+```
+-->
+
+
+```{r}
+sessionInfo()
+```
+

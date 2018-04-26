@@ -1,0 +1,258 @@
+---
+title: "Procing and plotting dme209 facs data, figuring out the prior distributions..."
+author: "Darach"
+date: "`r Sys.Date()`"
+---
+
+# importing
+
+First, libraries.
+
+```{r}
+library(tidyverse)
+library(stringr)
+```
+
+No sample sheet, we just hardcode it.
+
+```{r,readmeta,cache=T}
+sampleSheet <- tibble(
+  Filename=str_c("../data/dme209/facs/",
+    c("Specimen_001_A1.fcs","Specimen_001_A4.fcs",
+      "Specimen_001_B1.fcs","Specimen_001_B4.fcs",
+      "Specimen_001_C1.fcs","Specimen_001_C4.fcs",
+      "Specimen_001_I1-.fcs","Specimen_001_I1+.fcs",
+      "Specimen_001_I2-.fcs","Specimen_001_I2+.fcs")
+  ),
+  BiologicalReplicate=c("A","A","B","B","C","C","I1","I1","I2","I2"),
+  Shifted=c("pre-upshift","shifted")[c(1,2,1,2,1,2,1,1,1,1)],
+  Probed=c("not-probed","probed")[c(2,2,2,2,2,2,1,2,1,2)]
+)
+
+```
+
+Then we read the data in, and adjust up to scale everything into 
+positive APC.A values.
+
+```{r,readdatar,cache=T}
+datar <- sampleSheet %>% group_by(Filename) %>%
+  mutate(File=list(data.frame(flowCore::exprs(flowCore::read.FCS(Filename))))) %>% 
+  unnest() %>% ungroup() 
+gatez <- read_csv("../data/dme209/dme209.FACSGates.csv",comment="#") %>%
+  mutate(Shifted=c("pre-upshift","shifted")[
+    ifelse(FACSGate%in%c("p2","p3","p4","p5"),1,2)]) 
+
+datar%>%filter(BiologicalReplicate%in%c("A","B","C"))%>%
+  group_by(Shifted)%>%summarize(min(APC.A),max(APC.A))
+
+2^18
+
+datar%>%filter(BiologicalReplicate%in%c("A","B","C"))%>%
+  group_by(Shifted)%>%summarize(min(Pacific.Blue.A),max(Pacific.Blue.A))
+
+minApc <- -1200
+minPb <- -150
+datar <- datar %>% 
+  mutate(APC.A=APC.A-minApc) %>% 
+  mutate(Pacific.Blue.A=Pacific.Blue.A-minPb)
+gatez <- gatez %>% 
+  mutate(LowerBound=LowerBound-minApc,UpperBound=UpperBound-minApc)
+
+gatez <- left_join(gatez,
+  datar%>%
+      filter(!(BiologicalReplicate%in%c("I1","I2")))%>%
+      select(BiologicalReplicate,Shifted,APC.A) 
+  ,by=c("BiologicalReplicate","Shifted")) %>%
+  group_by(BiologicalReplicate,Shifted,FACSGate,LowerBound,UpperBound,Events) %>%
+  summarize(MeanSignalInBin=
+    mean(APC.A[APC.A>LowerBound&APC.A<=UpperBound+1],na.rm=T)) %>%
+  ungroup()
+
+```
+
+```{r}
+save(gatez,file="../tmp/dme209FACSgatez.RData")
+
+```
+
+```{r,exploreAndGate1,cache=T}
+datar %>% ggplot(aes(x=FSC.A,y=FSC.A/FSC.W))+
+  geom_point(size=0.1)+scale_y_log10()+scale_x_log10()+
+  facet_grid(BiologicalReplicate~Shifted+Probed)
+```
+
+
+```{r,exploreAndGate2,cache=T}
+datar %>% ggplot(aes(x=Pacific.Blue.A,y=APC.A))+
+  geom_point(size=0.1,alpha=0.1)+scale_y_log10()+scale_x_log10()+
+  facet_grid(BiologicalReplicate~Shifted+Probed)+
+  geom_vline(xintercept=700,col="blue",linetype="dashed")
+```
+
+```{r}
+flowDatar <- datar %>% filter(Pacific.Blue.A>700,BiologicalReplicate%in%c("A","B","C"))
+save(flowDatar,file="../tmp/dme209flowCytometry.RData")
+save(gatez,flowDatar,file="../tmp/Figure4facs.RData")
+```
+
+```{r,exploreAndGate3,cache=T}
+
+g <- flowDatar %>% 
+  ggplot(aes(x=APC.A))+theme_classic()+
+    geom_histogram(aes(fill=Shifted),binwidth=0.05,position="identity",alpha=0.80)+
+    guides(fill=F)+
+    scale_x_log10(breaks=c(1,2,4,6,12,24)*1e3)+
+    theme(axis.text.x=element_text(angle=90))+
+    facet_grid(Shifted~BiologicalReplicate)+
+    geom_vline(color="grey50",data=gatez,
+      aes(xintercept=UpperBound))+
+    geom_vline(color="grey50",data=gatez,
+      aes(xintercept=LowerBound))+
+#    geom_curve(linetype="solid",color="grey50",data=gatez,curvature=0,
+#      arrow=arrow(ends="both",angle=90,length=unit(5,"inches")),
+#      aes(x=LowerBound,xend=UpperBound,y=0,yend=0))+
+    geom_text(data=gatez%>%group_by(FACSGate)%>%
+      mutate(GateName=c("p2"="PreShift_1","p3"="Preshift_2",
+        "p4"="Preshift_3","p5"="Preshift_4",
+        "p6"="Shifted_1","p7"="Shifted_2",
+        "p8"="Shifted_3","p9"="Shifted_4")[FACSGate],
+        Center=mean(c(LowerBound,UpperBound))),
+      aes(label=GateName,
+      x=Center,
+      y=220+(Shifted=="pre-upshift")*400),
+      nudge_x=0.0,angle=90,size=3)+
+    ylab("Events")+xlab("GAP1 mRNA FISH signal")
+g+coord_cartesian(xlim=c(600,1e5))
+
+gprezi <- flowDatar %>% 
+  ggplot(aes(x=APC.A))+theme_classic()+
+    geom_histogram(aes(fill=Shifted),binwidth=0.05,position="identity",alpha=0.80)+
+    guides(fill=F)+
+    scale_x_log10(breaks=c(1,2,4,6,12,24)*1e3)+
+    theme(axis.text.x=element_text(angle=90))+
+    facet_grid(Shifted~BiologicalReplicate)+
+    geom_vline(color="grey50",data=gatez,
+      aes(xintercept=UpperBound))+
+    geom_vline(color="grey50",data=gatez,
+      aes(xintercept=LowerBound))+
+#    geom_curve(linetype="solid",color="grey50",data=gatez,curvature=0,
+#      arrow=arrow(ends="both",angle=90,length=unit(5,"inches")),
+#      aes(x=LowerBound,xend=UpperBound,y=0,yend=0))+
+    ylab("Events")+xlab("GAP1 mRNA FISH signal")
+gprezi+coord_cartesian(xlim=c(600,1e5))
+
+```
+
+
+```{r,modeling,cache=T}
+
+g <- flowDatar %>% 
+  ggplot(aes(x=log10(APC.A)))+theme_bw()+
+    scale_x_continuous(breaks=0:9)+
+    coord_cartesian()+#xlim=c(5e2,5e4))+
+    geom_histogram(aes(fill=Shifted),bins=080,position="identity",alpha=0.80)+
+    guides(fill=F)+
+    theme(axis.text.x=element_text(angle=90))+
+    facet_grid(Shifted~BiologicalReplicate)+
+    ylab("Events")+xlab("GAP1 mRNA FISH signal")
+g
+
+g+stat_function(fun=function(x){dnorm(x,mean=3.15,sd=0.15)*3e2})
+
+g2 <- g+coord_cartesian(xlim=log10(c(5e2,5e4)))
+
+g2+stat_function(fun=function(x){dnorm(x,mean=3.15,sd=0.15)*3e2})
+```
+
+
+
+```{r,fittingDistributions,cache=T}
+
+fitDatar <- flowDatar 
+
+shifted <- data.frame(fitDatar %>% 
+  filter(Shifted=="shifted") %>% 
+  select(APC.A,BiologicalReplicate,Shifted))
+shifted$APC.A <- log10(shifted$APC.A)
+
+unshifted <- data.frame(fitDatar %>% 
+  filter(Shifted=="pre-upshift") %>% 
+  select(APC.A,BiologicalReplicate,Shifted))
+unshifted$APC.A <- log10(unshifted$APC.A)
+
+ggplot(rbind(shifted,unshifted),aes(x=APC.A,col=BiologicalReplicate))+
+  facet_wrap(~Shifted)+geom_density()
+
+```
+
+Going to try to fit half a normal to the shifted populations.
+I'm assuming that the right tail is real mutants, so I'm going to
+reflect the left of mode one, and fit the sd to that.
+
+```{r,fittingDistributions1,cache=T,warning=F}
+shist <- hist(shifted$APC.A,150,plot=T)
+leftmode <- shist$mids[which(shist$counts==max(shist$counts))]
+
+reflectedLeft <- c(shifted$APC.A[shifted$APC.A<=leftmode],
+  -(shifted$APC.A[shifted$APC.A<=leftmode]-leftmode)+leftmode)
+
+leftshiftll <- function(sdz) {
+  return(-sum(log(
+    dnorm(reflectedLeft,mean=leftmode,sd=sdz)
+  )))
+}
+leftmod <- stats4::mle(minuslogl=leftshiftll,start=list(sdz=1))
+
+leftplot <- hist(shifted$APC.A,100,plot=F)
+ggplot(data.frame(x=leftplot$mids,y=leftplot$density),aes(x=x,y=y))+
+  geom_bar(stat="identity")+
+  stat_function(size=2,alpha=0.5,col="blue",fun=function(x){
+    dnorm(x,mean=leftmode,sd=leftmod@coef[1])*0.8})
+```
+
+Blue is the fit.  
+Again, I think the right tail is bonafide mutants, or residual
+repression from GAP1 not being completely off yet.
+
+Either way, I'm looking for things that are suprisingly on,
+compared to a distribution of mean `r leftmode` and sd 
+`r leftmod@coef[1]`.
+
+This is with a minApc of `r minApc`.
+
+What about the right one?
+
+```{r,fittingDistributions2cache=T,warning=F}
+
+#unshifted <- subset(unshifted,BiologicalReplicate!="")
+
+onll <- function(p1,meanz,sdz) {
+  return(-sum(log(
+    p1*dnorm(unshifted$APC.A,mean=leftmode,sd=leftmod@coef[1])+
+    (1-p1)*dnorm(unshifted$APC.A,mean=meanz,sd=sdz)
+  )))
+}
+onmod <- stats4::mle(minuslogl=onll,
+  start=list(p1=0.1,meanz=3,sdz=.1))
+onplot <- hist(unshifted$APC.A,100,plot=F)
+ggplot(data.frame(x=onplot$mids,y=onplot$density),aes(x=x,y=y))+
+  geom_bar(stat="identity")+
+  stat_function(size=2,alpha=0.5,col="blue",fun=function(x){
+    dnorm(x,mean=leftmode,sd=leftmod@coef[1])*onmod@coef[1]})+
+  stat_function(size=2,alpha=0.5,col="yellow",fun=function(x){
+    dnorm(x,mean=onmod@coef[2],sd=onmod@coef[3])*(1-onmod@coef[1])})+
+  stat_function(size=2,alpha=0.5,col="green",fun=function(x){
+    dnorm(x,mean=leftmode,sd=leftmod@coef[1])*onmod@coef[1]+
+    dnorm(x,mean=onmod@coef[2],sd=onmod@coef[3])*(1-onmod@coef[1])})
+
+```
+
+So that's a mix of `r onmod@coef[1]` of an off normal of mean 
+`r leftmode` and sd `r leftmod@coef[1]`, and a right normal of 
+`r onmod@coef[2]` mean and `r onmod@coef[3]` sd.
+
+
+```{r}
+sessionInfo()
+```
+

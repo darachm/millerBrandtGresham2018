@@ -1,0 +1,523 @@
+---
+title: "Importing and QCing the sequencing data from dme211"
+author: "Darach"
+date: "`r Sys.Date()`"
+---
+
+This document/code is for the import of the HTseq count files
+from dme211, then does some preliminary looks at the data, a bit of
+QC, then saves the data as an RData object. This is so that the
+modeling script can use that to do modeling, and then analysis
+can use that.
+
+The pipeline for counts quantification
+was run again on the NYU Mercer HPC cluster on March 3rd 2017.
+You should obtain the output count files (named with identifiers
+[wq][0-9]{2}) and put them in the right directory. This should
+be in the zip of the data folder, so you should be able to just
+unzip that and go. 
+
+Alternatively, you could re-run all the scripts yourself.
+After extensive efforts, we've realized that an automated pipeline
+doesn't mesh so nicely with my skill level of `make`-filing,
+although I'd imagine there's more sophisticated ways to integrate
+batch submission and tracking with makefiles.
+
+Briefly, to repeat this you'd:
+
+- Get the fastq files, these should be zipped in an archive
+  distributed with the paper.
+  You'll need to point the adapter 
+  trimmer at it.
+- Make a `bowtie2` index out of `BES.fa`, that's in the BES archive.
+- Modify and run the sbatch scripts. There's `trimming`, `aligning`,
+  `deduping`, and `counting`.
+  You'll need several different tools, `samtools`, `umi-tools`, 
+  `tophat`/`bowtie2`, `cutadapt`, `htseq`. 
+  Make sure to give `htseq` the modified BES GFF file. That's got
+  all "gene" containing types reset to "gene", so we can count them
+  all.
+
+Then, stick those outputs in `data/dme211` so this script can
+get at it.
+
+# Loading things
+
+```{r,library,cache=F}
+library(tidyverse)
+filesAt <- "../data/dme211/"
+```
+
+First, read in the actual times of sampling and sampling info
+from `sampleSheet.csv`.
+
+Also, `q` is the glutamine pulse, `w` is the water pulse.
+
+```{r,procingTimesheet,cache=T}
+library(chron)
+timez <- read_csv(paste0(filesAt,"sampleSheet.csv")) %>%
+  separate(time,c("hour","minute","second"),sep=":") %>%
+  mutate(hour=as.numeric(hour),minute=as.numeric(minute),
+    second=as.numeric(second)) %>%
+  mutate(secondofday=((hour*60)+minute)*60+second) %>%
+  mutate(timepoint=sub("[qw]","",timepoint)) %>%
+  mutate(timepoint=ifelse(grepl("uracil",notes),"start",timepoint)) %>%
+  mutate(timepoint=ifelse(grepl("1.22ml",notes),"interrup",timepoint)) %>%
+  group_by(treatment) %>% 
+  mutate(expmin=signif((secondofday-min(secondofday))/60,digits=3))
+```
+
+Read in the `BES.gff` file, for making plots of counts by type
+of gene. This is the `BES` that was for the bowtie2 index and the
+htseq counting.
+
+```{r,readGFF,cache=T}
+besgff <- read_tsv("../data/BES/BES.gff",col_names=F,quote="") %>%
+  mutate(ID=sub(".*ID=([^;]+);.*","\\1",X9),IsGene=grepl("gene",X3)) %>%
+  mutate(ID=sub("%28","(",ID),ID=sub("%29",")",ID)) 
+```
+
+Now we grab some gene names for plots, out of the SGDfeatures table
+downloaded from SGD.
+
+```{r,namez,cache=T}
+load("../tmp/NameIDList.RData")
+ls()
+```
+
+# Reading datar
+
+Read in the `htseq-count` tabulated data.
+
+```{r,readinghtseqdata,cache=T}
+htseq <- tibble(filename=list.files(path=filesAt,
+    pattern=".*htseqcounts.txt",full.names=T)) %>% 
+  group_by(filename) %>% 
+  mutate(rawfile=list(read_tsv(filename,col_names=F))) %>%
+  unnest() %>%
+  mutate(timepoint=sub(".+[wq](\\d+)\\..*","\\1",filename),
+    treatment=sub(".+([wq])\\d+\\..*","\\1",filename)) %>%
+  filter(!grepl("^__",X1)) %>%
+  mutate(X1=sub("%28","(",X1),X1=sub("%29",")",X1)) %>%
+  mutate(Systematic=X1)%>%select(-X1)%>%
+  mutate(counts=X2)%>%select(-X2)
+ms <- left_join(htseq,timez%>%select(treatment,timepoint,expmin),
+  by=c("treatment","timepoint"))
+ms <- left_join(ms,SGD%>%mutate(Systematic=X4)%>%select(Systematic,Common),
+  by=c("Systematic")) %>%
+  mutate(Common=ifelse(is.na(Common),Systematic,Common))
+ms <- left_join(ms,besgff%>%mutate(Systematic=ID,type=X3)%>%
+  select(type,Systematic),by=c("Systematic"))
+ms <- ms %>% mutate(species="yeast") %>% 
+  mutate(species=ifelse(grepl("gene",Systematic),"ecoli",species)) %>%
+  mutate(species=ifelse(
+    Systematic%in%c("BAC-1","BAC-2","BAC-3","CEL-4"),"synth",species))
+ms <- ms %>% 
+  mutate(species=factor(species)) %>%
+  mutate(timepoint=as.numeric(timepoint)) %>%
+  mutate(treatment=factor(treatment)) %>%
+  unite(sampleName,treatment,timepoint,sep="",remove=F) %>%
+  ungroup() %>% select(-filename)
+```
+
+```{r}
+write_lines("#
+# Supplementary Table
+#
+# Raw counts from pulse-chase sequencing experiment, organized in
+# long format.
+#
+# Key:
+# Systematic name , treatment , minutes after starting the uracil chase , count of reads observed from this gene feature , feature type , species of origin"
+  ,path="../output/Figure2_Table_RawCountsTableForPulseChase.csv")
+ms%>%arrange(Systematic)%>%
+  dplyr::select(Systematic,treatment,expmin,counts,type,species)%>%
+  rename(SystematicName=Systematic
+    ,Treatment=treatment,MinutesAfterUracilChase=expmin
+    ,Counts=counts,FeatureType=type,Species=species
+    ) %>% 
+  write_csv(path="../output/Figure2_Table_RawCountsTableForPulseChase.csv",append=T)
+
+```
+
+How many counts of each type to I have? This is `htseq-count` output,
+so that's total for each of these. Note that things that align to
+a non-feature in yeast or ecoli get stuck in `no_feat`, etc.
+For the htseq run, I used a custom GFF file that would also count
+for features that had "gene" in their name, so "rRNA_gene" or whatever.
+
+```{r,cache=T}
+ms %>% group_by(species) %>% summarize(sum(counts))
+
+ms %>% group_by(species,expmin,treatment) %>% 
+  summarize(SumCounts=sum(counts)) %>%
+  ggplot()+aes(x=expmin,y=SumCounts,col=species)+
+    theme(axis.text.x=element_text(angle=90))+
+    facet_wrap(~treatment)+
+    geom_point()+scale_y_log10(limits=c(1,NA))
+```
+
+# preliminary analysis
+
+How'd we do with the sequencing experiment? I split ~400 million reads
+across 24 libraries, but they were all different amplifications and
+qualities and inputs to lib prep.
+
+```{r,sampleTotals,cache=T}
+g<-ggplot(ms)+aes(weight=counts,x=as.numeric(as.character(timepoint)))+
+  facet_wrap(~treatment)+
+  scale_x_continuous(breaks=1:12)+
+  xlab("timepoint")+ylab("unique counts")+
+  ggtitle("Total unique counts, de-duplicated with `umi-tools` and all.")
+g+geom_bar()+scale_y_continuous(breaks=seq(0,2.5e6,0.5e6))
+g+geom_point(stat="count")+scale_y_log10(breaks=seq(0,2.5e6,1e5))
+```
+
+Not so well. Looks like I have scant unique reads. Which is too be
+expected, as I needed to amplify my final libraries 18 or 20 cycles
+(!!!!) to get enough material to sequence. We are very limited by
+the lib prep efficiency here. Well, rather we're just not putting in
+enough RNA, let's be fair. Nitrogen-limitation is a challenging
+condition to study RNA in.
+
+```{r,startplotz,cache=T}
+ggplot(ms)+
+  aes(x=counts,col=factor(as.numeric(as.character(timepoint))))+
+  facet_wrap(~treatment)+
+  stat_bin(geom="line",position="identity",bins=50)+
+  scale_x_log10()+theme(legend.position="bottom")+
+  ggtitle("So how are total number of unique counts distributed?")
+
+```
+
+Yikes.
+
+```{r,lookingAtComposition,cache=T}
+g<-ggplot(ms)+aes(x=type,weight=counts,fill=type)+
+  geom_bar()+scale_y_log10()+
+  facet_grid(.~species,scales="free_x",space="free_x",drop=T,switch="x")+
+  theme(axis.text.x=element_text(angle=90))+
+  ggtitle("What are our reads composed of? Particular types of features?")
+g
+
+g<-ggplot(ms)+aes(weight=counts,color=species,
+    x=as.numeric(as.character(timepoint)))+
+  facet_wrap(~treatment)+
+  geom_point(stat="count")+geom_line(stat="count")+
+  scale_x_continuous(breaks=1:12)+
+  xlab("timepoint")+ylab("unique counts")+
+  ggtitle("And across timepoints?")
+g+scale_y_log10()
+g+scale_y_log10()+aes(color=species:factor(type))
+```
+
+Note that for "ecoli" and "synth", we call everything a "gene".
+
+Not much spike-ins! Should doubled-down on adding these.
+With low low yield of non-rRNA after labeling and pulldown, 
+I also get few spikeins.
+
+I have about a thousand or ten of rRNA or tRNA. I do see a lot of
+transposon-mapping RNA.
+
+So we can see the composition, and that's nice. But the big problem
+is that I don't have much in the way of spike ins. This means they'll
+be noisy. Let's see how much.
+
+# Normalize in prep for modeling
+
+Here, we normalize by sum of ecoli or spike-ins, as Dan Tranchina
+said that's the best estimate for normalization. 
+We'll evaluate which one we trust in a bit, ie ecoli or synthetic
+or both.
+We remove any residual rRNA just to remove
+any noise that could be from variance in ribo-depletion step.
+
+```{r,normingbysum,cache=T}
+ms <- left_join(ms,ms %>% filter(type!="rRNA_gene") %>%
+    group_by(species,sampleName) %>% 
+    summarize(total=sum(counts)) %>%
+    spread(species,total) %>% group_by(sampleName) %>%
+    transmute(ecoliTotal=ecoli,synthTotal=synth,yeastTotal=yeast)
+  ,by="sampleName") %>%
+  mutate(normedByBoth=counts/(ecoliTotal+synthTotal),
+    normedByEcoli=counts/ecoliTotal,
+    normedBySynth=counts/synthTotal) 
+```
+
+```{r,exportms}
+save(ms,file="../tmp/dme211ms.RData")
+```
+
+So, how do the proportions of reads that are spike-ins change over
+time? We expect that they increase, given this is a chasing the
+label experiment.
+
+```{r,props,cache=T}
+totz <- left_join(ms %>% group_by(sampleName,species,expmin,treatment) %>%
+    summarize(totalCounts=sum(counts)) %>% group_by(sampleName) %>%
+    spread(species,totalCounts)
+  ,ms %>% group_by(sampleName) %>%
+    summarize(totalCounts=sum(counts)) 
+  ,by="sampleName") %>%
+  mutate(synth=synth/totalCounts,
+    ecoli=ecoli/totalCounts) %>%
+  gather(SpikeType,Proportion,synth,ecoli)
+
+g <- ggplot(totz)+
+  aes(x=expmin,y=Proportion,col=treatment)+
+  facet_wrap(~SpikeType,scales="free")+geom_point()+
+  ggtitle("proportion of reads for each spikein type, over samples")
+g
+```
+
+Uh oh. The ecoli ones sure don't look like that worked well. Why is
+that? Strange. 
+
+I think it's because it's so complex and I put in
+so little unfortunately. So there might be a really biased selection
+of reads, so them maybe that would allow for more heterogeneity
+of library composition and GC content in the PCR.
+
+Let's omit the ecoli and recalculate.
+
+```{r,props2,cache=T}
+totz <- left_join(ms %>% filter(species!="ecoli") %>%
+    group_by(sampleName,species,expmin,treatment) %>%
+    summarize(totalCounts=sum(counts)) %>% group_by(sampleName) %>%
+    spread(species,totalCounts)
+  ,ms %>% filter(species!="ecoli") %>% group_by(sampleName) %>%
+    summarize(totalCounts=sum(counts)) 
+  ,by="sampleName") %>%
+  mutate(Proportion=synth/totalCounts) %>% ungroup()
+
+totz %>% ggplot()+
+  aes(x=expmin,y=Proportion,col=treatment)+
+  geom_point()+
+  ggtitle("proportion of reads for each spikein type, over samples")
+
+totz %>% ggplot()+
+  aes(x=expmin,y=Proportion)+
+  geom_point(aes(col=treatment))+facet_wrap(~treatment)+
+  ggtitle("proportion of reads for each spikein type, over samples")+
+  scale_y_log10()+
+  stat_smooth(data=totz%>%filter(expmin<40),method="lm",fullrange=T,
+    aes(col=treatment))
+```
+
+Huh. What if we model the increase in proportion together, and just
+use that to scale the counts?
+
+Oh, and we toss that last sample because that's probably flatlined
+to equilibrium, so it shouldn't be behaving like our model.
+
+That last timepoint was put in just in-case we could use it for 
+modeling label proportions (see analysis script), 
+but I don't think that's a clear answer either.
+
+```{r,modelProp,cache=T}
+g<- totz %>% filter(expmin<40) %>% ggplot()+
+  aes(x=expmin,y=Proportion)+
+  stat_smooth(method="lm",fullrange=T,col="black",se=F)+
+  geom_point(aes(col=treatment))+
+  xlab("Minutes after chase")+
+  ylab("Proportion of reads\nthat are spike-ins")+
+  theme(legend.position="bottom")+
+  scale_y_log10(breaks=c(seq(5e-5,2e-4,by=5e-5),seq(3e-4,9e-4,2e-4),seq(1e-3,1e-2,2e-3)))
+g
+```
+
+```{r}
+g <- tibble(expmin = (totz%>%filter(expmin<40))$expmin,
+  treatment = (totz%>%filter(expmin<40))$treatment,
+  residuals=residuals(lm(data=totz%>%filter(expmin<40),log(Proportion)~expmin))) %>%
+  ggplot()+aes(x=expmin,y=residuals,col=treatment)+
+    ylab("Residuals")+
+    xlab("Minutes after chase")+
+    theme(legend.position="bottom")+
+    geom_point()
+g
+```
+
+```{r,predictNorm,cache=T}
+propModel <- lm(data=totz%>%filter(expmin<40),log(Proportion)~expmin)
+
+ms <- left_join(
+  left_join(ms,
+    ms %>% filter(species!="ecoli") %>% group_by(sampleName) %>%
+      summarize(totalCounts=sum(counts))
+    ,by="sampleName") 
+  ,tibble(sampleName=(totz %>% filter(expmin<40))$sampleName,
+    predictedProp=exp(predict(propModel)))
+  ,by="sampleName") %>% 
+  mutate(predictTotal=predictedProp*totalCounts) %>%
+  mutate(normedByPredict=counts/predictTotal)
+```
+
+For more details on this, see the write up specifically about this,
+distributed as supplemental associated with the label-chase
+figure. That's the same model here for the normalization. To summarize,
+we use the model-based normalization, although we provide the
+direct normalization as well, although I recommend removing
+samples q that 2 7 8 and w 1 2 4 because of insufficient spike-in
+counts to estimate actual abundance. 
+
+```{r,allofthem,cache=T}
+normed <- ms %>% filter(species=="yeast") %>%
+  mutate(Minutes=expmin,SampleName=sampleName,Treatment=treatment,
+    Timepoint=timepoint,
+    Counts=counts,TotalCounts=totalCounts,
+    SyntheticSpikeIns=synthTotal,NormedDirect=normedBySynth,
+    ModeledSpikeIns=predictTotal,NormedModel=normedByPredict) %>%
+  select(Systematic,Common,SampleName,Treatment,Timepoint,Minutes,
+    Counts,TotalCounts,SyntheticSpikeIns,NormedDirect,
+    ModeledSpikeIns,NormedModel)
+
+normed <- normed %>% mutate(Treated=Treatment=="q"&Minutes>12.5)
+```
+
+```{r}
+save("normed",file="../tmp/dme211normalizedData.RData")
+```
+
+How does the raw look?
+
+```{r,lowreads,cache=T,eval=F}
+as_tibble(normed)%>%group_by(Systematic,Common)%>%
+  dplyr::summarize(Counts=sum(Counts))%>%ggplot()+aes(x=Counts)+
+  geom_histogram(bins=100)+scale_x_log10()
+
+as_tibble(normed)%>%
+  group_by(Systematic,Common,Treatment,Treated)%>%
+  dplyr::summarize(Counts=sum(Counts))%>%
+  unite(Phase,Treatment,Treated) %>%
+  ggplot()+aes(x=Counts)+geom_histogram(bins=100)+scale_x_log10()+
+  facet_wrap(~Phase)
+
+as_tibble(normed)%>%
+  group_by(Systematic,Common,Treatment,Treated)%>%
+  dplyr::summarize(Obs=sum(Counts>0))%>%
+  unite(Phase,Treatment,Treated) %>%
+  ggplot()+aes(x=Obs)+geom_histogram(bins=100)+
+  facet_wrap(~Phase,scales="free")
+
+normed <- as_tibble(normed)%>%group_by(Systematic,Common)%>%
+  summarize(Counts=sum(Counts))%>%filter(Counts>50)%>%
+  ungroup()%>%select(Systematic)%>%distinct()%>%
+  left_join(normed,by="Systematic")
+```
+
+Keep in mind that in order for the modeling to work okay, we've got
+to filter the below data for the direct normalization measure having
+two counts per facet of the experiment (combinations of treatment
+and before/after 13min). 
+
+```{r,filtering2,cache=T}
+
+datarForModeling <- normed%>%
+  filter(Minutes<30)%>%
+  mutate(BeforeAfter=Minutes>12.5)%>%
+  group_by(Systematic,Common,Treatment,BeforeAfter) %>%
+  dplyr::summarize(Obs=sum(Counts>0,na.rm=T)) %>%
+  filter(Obs>=2)%>%group_by(Systematic,Common)%>%
+  dplyr::summarize(Phases=length(Obs))%>%filter(Phases==4) %>%
+  select(Systematic)%>%distinct()%>%
+  left_join(normed%>%
+      filter(Minutes<30)
+    ,by="Systematic")%>%ungroup()
+
+```
+
+We are also going to drop the direct normalization for the timepoints
+that look very off on the aggregate measurements, as I think it's
+just low coverage of the spike-ins that are making those points
+super-noisy for the entire transcriptome.
+
+```{r,filtering3,cache=T}
+datarForModelingDirect <- datarForModeling %>% 
+  mutate(NormedDirect=ifelse(
+      (Treatment=="w"&Timepoint%in%c(1,2,4))|
+      (Treatment=="q"&Timepoint%in%c(2,7,8))
+    ,NA,NormedDirect)) %>%
+  filter(Minutes<30)%>%
+  mutate(BeforeAfter=Minutes>12.5)%>%
+  group_by(Systematic,Treatment,BeforeAfter)%>%
+  summarize(Obs=sum(!is.na(NormedDirect)&NormedDirect>0,na.rm=T)) %>%
+  ungroup() %>% filter(Obs>=2) %>% 
+  group_by(Systematic)%>%
+  dplyr::summarize(Phases=length(Obs))%>%filter(Phases==4)%>%
+  select(Systematic)%>%distinct()%>%
+  left_join(datarForModeling%>%
+      filter(!(
+        (Treatment=="w"&Timepoint%in%c(1,2,4))|
+        (Treatment=="q"&Timepoint%in%c(2,7,8)))
+      )
+    ,by="Systematic")%>%ungroup()
+
+length(unique((ms%>%filter(species=="yeast"))$Systematic))
+
+length(unique((datarForModelingDirect)$Systematic))
+
+length(unique((datarForModelingDirect)$Systematic))/ 
+  length(unique((ms%>%filter(species=="yeast"))$Systematic))
+```
+
+So that's the proportion of gene features that keep on for doing
+the direct modeling. 
+
+Okay, so the `datarForModeling` is all features, everything.
+`niceDatarForModeling` is just the ones filtered by heuristic
+to exclude the genes where we don't have two points in each of 
+4 phases of the experiment (before and after treatment, 
+water and glutamine).
+
+```{r}
+save("datarForModeling",file="../tmp/dme211datarForModeling.RData")
+save("datarForModelingDirect",file="../tmp/dme211datarForModelingDirect.RData")
+
+write_lines("#
+# Supplementary Table 
+#
+# Observations of normalized signal of each gene feature's RNA. 
+# long format. This is the normalization with-in each sample.
+#
+# Key:
+# Systematic name , treatment , timepoint , minutes after starting the uracil chase , signal normalized directly to spike-ins observed in this sample"
+  ,path="../output/Figure2_Table_PulseChaseDataNormalizedDirectAndFiltered.csv")
+datarForModeling %>% 
+  dplyr::select(Systematic,Treatment,Timepoint,Minutes
+    ,NormedDirect) %>% 
+  rename(SystematicName=Systematic
+    ,MinutesAfterUracilChase=Minutes
+    ,DirectNormalizedSignal=NormedDirect
+    )%>%
+  write_csv(path="../output/Figure2_Table_PulseChaseDataNormalizedDirectAndFiltered.csv"
+    ,append=T)
+
+write_lines("#
+# Supplementary Table
+#
+# Observations of normalized signal of each gene feature's RNA. 
+# long format. This is the normalization using the proportion of
+# reads that are spike-ins smoothed across timepoints and between
+# treatments using a log-linear model of increase over time.
+#
+# Key:
+# Systematic name , treatment , timepoint , minutes after starting the uracil chase , signal normalized by modeled spike-in proportion increases"
+  ,path="../output/Figure2_Table_PulseChaseDataNormalizedByModel.csv")
+datarForModeling %>% 
+  dplyr::select(Systematic,Treatment,Timepoint,Minutes
+    ,NormedModel) %>% 
+  rename(SystematicName=Systematic
+    ,MinutesAfterUracilChase=Minutes
+    ,ModelNormalizedSignal=NormedModel
+    )%>%
+  write_csv(path="../output/Figure2_Table_PulseChaseDataNormalizedByModel.csv"
+    ,append=T)
+
+```
+
+```{r}
+sessionInfo()
+```
+
